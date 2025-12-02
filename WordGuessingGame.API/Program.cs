@@ -1,4 +1,5 @@
 
+using WordGuessingGame.API.Hubs;
 using WordGuessingGame.API.Models;
 using WordGuessingGame.API.Services;
 
@@ -23,6 +24,18 @@ namespace WordGuessingGame.API
             var words = File.ReadAllLines("words.txt");
             builder.Services.AddSingleton(new WordList(words));
 
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("CorsPolicy", policy =>
+                {
+                    policy
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials()
+                        .WithOrigins("http://localhost:5173"); // Svelte dev server
+                });
+            });
+
 
             var app = builder.Build();
 
@@ -32,9 +45,10 @@ namespace WordGuessingGame.API
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+            app.UseCors("CorsPolicy");
 
             // Create hubs here
-            //app.MapHub<GameHub>("/gamehub");
+            app.MapHub<GameHub>("/gamehub");
 
             app.UseHttpsRedirection();
 
