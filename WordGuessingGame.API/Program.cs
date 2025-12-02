@@ -1,4 +1,7 @@
 
+using WordGuessingGame.API.Models;
+using WordGuessingGame.API.Services;
+
 namespace WordGuessingGame.API
 {
     public class Program
@@ -13,6 +16,13 @@ namespace WordGuessingGame.API
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+            builder.Services.AddSignalR();
+            builder.Services.AddSingleton<GameState>();
+            builder.Services.AddScoped<GameService>();
+
+            var words = File.ReadAllLines("words.txt");
+            builder.Services.AddSingleton(new WordList(words));
+
 
             var app = builder.Build();
 
@@ -22,6 +32,9 @@ namespace WordGuessingGame.API
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+
+            // Create hubs here
+            //app.MapHub<GameHub>("/gamehub");
 
             app.UseHttpsRedirection();
 
