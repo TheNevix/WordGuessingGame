@@ -69,6 +69,12 @@
       console.log("Opponent wants rematch");
       rematchCount++;
     });
+
+    connection.on("Disconnected", () => {
+      console.log("Opponent has left!");
+      isWaiting = true;
+      gameStarted = false;
+    });
   });
 
   async function connectToHub() {

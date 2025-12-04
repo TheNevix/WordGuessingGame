@@ -41,6 +41,7 @@ namespace WordGuessingGame.API.Hubs
 
         public override Task OnDisconnectedAsync(Exception? exception)
         {
+            _gameService.DisconnectAsync(Context.ConnectionId);
             return base.OnDisconnectedAsync(exception);
         }
     }

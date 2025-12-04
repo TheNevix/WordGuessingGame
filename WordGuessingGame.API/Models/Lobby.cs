@@ -49,5 +49,30 @@
 
             return null; // Player is not in a game yet
         }
+
+        public void DisconnectPlayer(string connectionId)
+        {
+            _playerToGame.Remove(connectionId);
+
+            var newQueue = new Queue<User>();
+
+            foreach (var player in _waitingPlayers)
+            {
+                if (player.ConnectionId != connectionId)
+                    newQueue.Enqueue(player);
+            }
+
+            _waitingPlayers.Clear();
+
+            foreach (var p in newQueue)
+            {
+                _waitingPlayers.Enqueue(p);
+            }
+        }
+
+        public void EndGame(Guid gameId)
+        {
+            _games.Remove(gameId);
+        }
     }
 }

@@ -85,6 +85,40 @@ namespace WordGuessingGame.API.Services
             }
         }
 
+        // 2 options: player disconnects during game, player disconnects while waiting
+        public async Task DisconnectAsync(string connectionId)
+        {
+            // *******Still in lobby
+            var game = _lobby.GetGameByPlayerId(connectionId);
+
+            if (game is null)
+            {
+                _pendingPlayers.Remove(connectionId);
+                _namedPlayers.Remove(connectionId);
+                _lobby.DisconnectPlayer(connectionId);
+                return;
+            }
+
+            // *******In game
+            var opponent = game.Player1?.ConnectionId == connectionId
+                ? game.Player2
+                : game.Player1;
+
+            // Send disconnect to other player
+            await _hub.Clients.Client(opponent.ConnectionId).SendAsync("Disconnected");
+
+            // Remove the named player
+            _namedPlayers.Remove(connectionId);
+            _pendingPlayers.Remove(connectionId);
+            _lobby.DisconnectPlayer(connectionId);
+
+            // Remove the game
+            _lobby.EndGame(game.GameId);
+
+            // Move the other player back to waiting
+            _lobby.JoinPlayer(opponent);
+        }
+
         public async Task GuessAsync(string connectionId, string guess)
         {
             var game = _lobby.GetGameByPlayerId(connectionId);
