@@ -6,7 +6,7 @@ namespace WordGuessingGame.API.Hubs
 {
     public class GameHub : Hub
     {
-        private GameService _gameService;
+        private readonly GameService _gameService;
 
         public GameHub(GameService gameService)
         {
@@ -15,22 +15,33 @@ namespace WordGuessingGame.API.Hubs
 
         public override Task OnConnectedAsync()
         {
-            _gameService.OnConnected(Context.ConnectionId);
+            _gameService.AddPendingConnection(Context.ConnectionId);
             return base.OnConnectedAsync();
         }
 
         public async Task RegisterName(string name)
         {
-            await _gameService.RegisterNameAsync(Context.ConnectionId, name);
-
-            // Start the game if both players have registered
-            await _gameService.StartGame();
+            // Finalize the player
+            var player = _gameService.RegisterName(Context.ConnectionId, name);
         }
 
         // Can be a letter or a word
         public async Task Guess(string guess)
         {
-            await _gameService.GuessAsync(Context.ConnectionId, guess);
+            if (string.IsNullOrWhiteSpace(guess))
+                return; // or handle error however you want
+
+            await _gameService.GuessAsync(Context.ConnectionId, guess.ToUpper());
+        }
+
+        public async Task RematchVote()
+        {
+            await _gameService.RematchAsync(Context.ConnectionId);
+        }
+
+        public override Task OnDisconnectedAsync(Exception? exception)
+        {
+            return base.OnDisconnectedAsync(exception);
         }
     }
 }

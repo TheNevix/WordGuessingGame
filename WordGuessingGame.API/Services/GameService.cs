@@ -6,73 +6,99 @@ namespace WordGuessingGame.API.Services
 {
     public class GameService
     {
-        private readonly GameState _gameState;
+        private readonly Lobby _lobby;
         private readonly WordList _wordList;
         private readonly IHubContext<GameHub> _hub;
+        private readonly Dictionary<string, User> _pendingPlayers = new();
+        private readonly Dictionary<string, User> _namedPlayers = new();
 
-        public GameService(GameState gameState, WordList wordList, IHubContext<GameHub> hub)
+        public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub)
         {
-            _gameState = gameState;
+            _lobby = lobby;
             _wordList = wordList;
             _hub = hub;
         }
 
-        public void OnConnected(string connectionId)
+        public async Task AddPendingConnection(string connectionId)
         {
-            var user = new User(connectionId);
-
-            if (_gameState.Player1 == null)
-            {
-                _gameState.Player1 = user;
-            }
-            else if (_gameState.Player2 == null)
-            {
-                _gameState.Player2 = user;
-            }
+            _pendingPlayers[connectionId] = new User(connectionId);
+            await _hub.Clients.Client(connectionId).SendAsync("Connected", connectionId);
         }
 
-        public async Task RegisterNameAsync(string connectionId, string name)
+        public async Task RegisterName(string connectionId, string name)
         {
-            var user = _gameState.Player1?.ConnectionId == connectionId
-                ? _gameState.Player1
-                : _gameState.Player2;
+            var player = _pendingPlayers[connectionId];
+            player.Username = name;
 
-            if (user == null)
+            // Move to named players
+            _pendingPlayers.Remove(connectionId);
+            _namedPlayers[connectionId] = player;
+
+            // Try to join a game
+            var game = _lobby.JoinPlayer(player);
+
+            if (game == null)
             {
                 return;
             }
 
-            user.Username = name;
+            await _hub.Groups.AddToGroupAsync(game.Player1.ConnectionId, game.GameId.ToString());
+            await _hub.Groups.AddToGroupAsync(game.Player2.ConnectionId, game.GameId.ToString());
 
-            // Game should only start when both players have registered
-            await _hub.Clients.All.SendAsync("UserRegistered", user.Username);
+            await StartGame(game);
+
         }
 
-        public async Task StartGame()
+        public User GetPlayer(string connectionId)
+        {
+            return _namedPlayers.TryGetValue(connectionId, out var p) ? p : null;
+        }
+
+        public async Task StartGame(GameState game)
         {
             // Generates a word, resets game state, and notifies clients
-            GenerateAndClearState();
+            GenerateAndClearState(game);
 
-            await _hub.Clients.All.SendAsync("GameStarted", new
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("GameStarted", new
             {
-                CurrentWordLength = _gameState.CurrentWord.Length,
-                Player1 = _gameState.Player1?.Username,
-                Player2 = _gameState.Player2?.Username,
-                CurrentTurnConnectionId = _gameState.CurrengtTurnConnectionId
+                CurrentWordLength = game.CurrentWord.Length,
+                Player1 = game.Player1?.Username,
+                Player2 = game.Player2?.Username,
+                Turn = game.Player1.Username,
             });
+        }
+
+        public async Task RematchAsync(string connectionId)
+        {
+            var game = _lobby.GetGameByPlayerId(connectionId);
+
+            var rematchCount = game.Rematch.Where(r => r).Count();
+
+            if (rematchCount == 0)
+            {
+                game.Rematch[0] = true;
+            }
+            else
+            {
+                await StartGame(game);
+            }
+
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Rematch");
         }
 
         public async Task GuessAsync(string connectionId, string guess)
         {
+            var game = _lobby.GetGameByPlayerId(connectionId);
+
             var guessLength = guess.Length;
 
             if (guessLength == 1)
             {
-                await HandleCharGuess(connectionId, guess[0]);
+                await HandleCharGuess(game, connectionId, guess[0]);
             }
             else
             {
-                await HandleWordGuess(connectionId, guess);
+                await HandleWordGuess(game, connectionId, guess);
             }
         }
 
@@ -80,127 +106,136 @@ namespace WordGuessingGame.API.Services
         /// Handles a single character guess.
         /// </summary>
         /// <param name="guess">Recieved input which is a char</param>
-        private async Task HandleCharGuess(string connectionId, char guess)
+        private async Task HandleCharGuess(GameState game, string connectionId, char guess)
         {
             // Letter guess
-            if (!_gameState.GuessedLetters.Contains(guess))
+            if (!game.GuessedLetters.Contains(guess))
             {
-                _gameState.GuessedLetters.Add(guess);
+                game.GuessedLetters.Add(guess);
 
                 // Check if it is a correct guess
-                var indexes = CheckIfGuessedWasCorrect(guess);
+                var indexes = CheckIfGuessedWasCorrect(game, guess);
 
                 // If it has correct indexes, check if we have all the guessed letters
                 if (indexes.Count > 0)
                 {
                     // Check if all letters have been guessed
-                    var isGuessed = CheckIfGuessedByLetters();
+                    var isGuessed = CheckIfGuessedByLetters(game);
 
                     // If they are all guesed, game is over
                     if (isGuessed)
                     {
-                        await HandleWordGuessed(connectionId);
+                        await HandleWordGuessed(game, connectionId);
                         return;
                     }
                     else // Not all guessed, game is not over yet
                     {
                         // Prepare for next guess
-                        await PrepareForNextGuess(connectionId, indexes, guess.ToString());
+                        await PrepareForNextGuess(game, connectionId, indexes, guess.ToString());
                         return;
                     }
                 }
                 else // Wrong guess
                 {
                     // Prepare for next guess
-                    await PrepareForNextGuess(connectionId, indexes, guess.ToString());
+                    await PrepareForNextGuess(game, connectionId, indexes, guess.ToString());
+                    return;
                 }
             }
 
             // Letter already was guessed, let them now and give turn to other player
-            await PrepareForNextGuess(connectionId, new List<int>(), guess.ToString(), true);
+            await PrepareForNextGuess(game, connectionId, new List<int>(), guess.ToString(), true);
         }
 
-        private async Task HandleWordGuess(string connectionId, string guess)
+        private async Task HandleWordGuess(GameState game, string connectionId, string guess)
         {
             // Word guess
-            if (string.Equals(guess, _gameState.CurrentWord, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(guess, game.CurrentWord, StringComparison.OrdinalIgnoreCase))
             {
-                await HandleWordGuessed(connectionId);
+                await HandleWordGuessed(game, connectionId);
                 return;
             }
 
             // Incorrect word guess, prepare for next turn
-            await PrepareForNextGuess(connectionId, new List<int>(), guess);
+            await PrepareForNextGuess(game, connectionId, new List<int>(), guess);
         }
 
-        private async Task HandleWordGuessed(string connectionId)
+        private async Task HandleWordGuessed(GameState game, string connectionId)
         {
-            _gameState.IsGuessed = true;
+            game.IsGuessed = true;
 
-            var user = _gameState.Player1?.ConnectionId == connectionId
-                ? _gameState.Player1
-                : _gameState.Player2;
+            var user = game.Player1?.ConnectionId == connectionId
+                ? game.Player1
+                : game.Player2;
 
             // Send message to clients
-            await _hub.Clients.All.SendAsync("WordGuessed", new
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("WordGuessed", new
             {
-                Message = $"{user.Username} has guessed the word '{_gameState.CurrentWord}' correctly! Congratulations!",
+                Message = $"{user.Username} has guessed the word '{game.CurrentWord}' correctly! Congratulations!",
                 Winner = user.Username,
-                Word = _gameState.CurrentWord
+                Word = game.CurrentWord
             });
         }
 
-        private async Task PrepareForNextGuess(string connectionId, List<int> guessedLetterAppearsOnIndexes, string guess, bool didAlreadyExist = false)
+        private async Task PrepareForNextGuess(GameState game, string connectionId, List<int> guessedLetterAppearsOnIndexes, string guess, bool didAlreadyExist = false)
         {
             // Current user
-            var user = _gameState.Player1?.ConnectionId == connectionId
-                ? _gameState.Player1
-                : _gameState.Player2;
+            var user = game.Player1?.ConnectionId == connectionId
+                ? game.Player1
+                : game.Player2;
+
+            var opponent = game.Player1?.ConnectionId == connectionId
+                ? game.Player2
+                : game.Player1;
 
             // Change turns
-            _gameState.CurrengtTurnConnectionId = _gameState.Player1?.ConnectionId == _gameState.CurrengtTurnConnectionId
-                ? _gameState.Player2?.ConnectionId ?? string.Empty
-                : _gameState.Player1?.ConnectionId ?? string.Empty;
+            game.CurrentTurnUsername = game.Player1?.Username == game.CurrentTurnUsername
+                ? game.Player2?.Username ?? string.Empty
+                : game.Player1?.Username ?? string.Empty;
 
             // Notify clients about turn change
             if (didAlreadyExist && guess.Length == 1)
             {
                 // Notify about already guessed letter
-                await _hub.Clients.All.SendAsync("Guessed", new
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
                     Guess = guess,
                     Message = $"{user.Username} has guessed '{guess}'. The guessed letter was already guessed before.",
                     CorrectGuess = false,
+                    Turn = opponent.Username,
                 });
             }
             else if (guessedLetterAppearsOnIndexes.Count == 0 && guess.Length == 1)
             {
                 // Notify about incorrect guess
-                await _hub.Clients.All.SendAsync("Guessed", new
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
                     Guess = guess,
                     Message = $"{user.Username} has guessed '{guess}'. The word does not contain the letter '{guess}'.",
                     CorrectGuess = false,
+                    Turn = opponent.Username,
                 });
             }
             else if (guessedLetterAppearsOnIndexes.Count > 0 && guess.Length == 1) // Notify about correct guess
             {
                 // Notify about incorrect guess
-                await _hub.Clients.All.SendAsync("Guessed", new
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
                     Guess = guess,
                     Message = $"{user.Username} has guessed '{guess}'!",
                     CorrectGuess = true,
-                    Indexes = guessedLetterAppearsOnIndexes
+                    Indexes = guessedLetterAppearsOnIndexes,
+                    Turn = opponent.Username,
                 });
             }
             else // Notify about incorrect word guess
             {
-                await _hub.Clients.All.SendAsync("Guessed", new
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
                     Guess = guess,
                     Message = $"{user.Username} has guessed the word '{guess}'! That was not the word that we are searching!",
                     CorrectGuess = false,
+                    Turn = opponent.Username,
                 });
             }
         }
@@ -209,13 +244,13 @@ namespace WordGuessingGame.API.Services
         /// Checks if the current word has been completely guessed by letters.
         /// </summary>
         /// <returns></returns>
-        private bool CheckIfGuessedByLetters()
+        private bool CheckIfGuessedByLetters(GameState game)
         {
-            var word = _gameState.CurrentWord;
+            var word = game.CurrentWord;
 
             foreach (var letter in word)
             {
-                if (!_gameState.GuessedLetters.Contains(letter))
+                if (!game.GuessedLetters.Contains(letter))
                 {
                     return false;
                 }
@@ -228,28 +263,29 @@ namespace WordGuessingGame.API.Services
         /// Checks if the current word has been completely guessed by letters.
         /// </summary>
         /// <returns>Returns a list of ints, representing the indexes where the letter was found</returns>
-        private List<int> CheckIfGuessedWasCorrect(char guess)
+        private List<int> CheckIfGuessedWasCorrect(GameState game, char guess)
         {
-            var word = _gameState.CurrentWord;
+            var word = game.CurrentWord;
             var indexes = new List<int>();
 
-            foreach (var letter in word)
+            for (int i = 0; i < word.Length; i++)
             {
-                if (letter == guess)
+                if (word[i] == guess)
                 {
-                    indexes.Add(word.IndexOf(letter));
+                    indexes.Add(i);
                 }
             }
 
             return indexes;
         }
 
-        private void GenerateAndClearState()
+        private void GenerateAndClearState(GameState game)
         {
-            _gameState.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
-            _gameState.GuessedLetters.Clear();
-            _gameState.IsGuessed = false;
-            _gameState.CurrengtTurnConnectionId = _gameState.Player1?.ConnectionId ?? string.Empty;
+            game.Rematch = new List<bool> { false, false };
+            game.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
+            game.GuessedLetters.Clear();
+            game.IsGuessed = false;
+            game.CurrentTurnUsername = game.Player1?.ConnectionId ?? string.Empty;
         }
 
     }

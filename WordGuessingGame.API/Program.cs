@@ -18,8 +18,8 @@ namespace WordGuessingGame.API
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddSignalR();
-            builder.Services.AddSingleton<GameState>();
-            builder.Services.AddScoped<GameService>();
+            builder.Services.AddSingleton<Lobby>();
+            builder.Services.AddSingleton<GameService>();
 
             var words = File.ReadAllLines("words.txt");
             builder.Services.AddSingleton(new WordList(words));
