@@ -77,13 +77,12 @@ namespace WordGuessingGame.API.Services
             if (rematchCount == 0)
             {
                 game.Rematch[0] = true;
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Rematch");
             }
             else
             {
                 await StartGame(game);
             }
-
-            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Rematch");
         }
 
         public async Task GuessAsync(string connectionId, string guess)

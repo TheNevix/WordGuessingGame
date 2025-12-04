@@ -14,6 +14,7 @@
   let isWon = false;
   let currentTurn = null;
   let rematchCount = 0;
+  let hasVotedRematch = false;
 
   onMount(() => {
     // Build connection ONCE
@@ -33,6 +34,7 @@
       winnerMessage = null;
       isWon = false;
       rematchCount = 0;
+      hasVotedRematch = false;
       gameInformation = gameInfo;
       letters = Array(gameInfo.currentWordLength).fill("");
       currentTurn = gameInfo.turn
@@ -99,6 +101,7 @@
 
   function sendRematch() {
   connection.invoke("RematchVote");
+  hasVotedRematch = true;
 }
 
 </script>
@@ -281,12 +284,19 @@
         {rematchCount}/2 players want a rematch
       </div>
 
-      <button
-        on:click={() => sendRematch()}
-        style="width: 260px; margin-top: 2rem; font-size: 1.4rem;"
+      {#if !hasVotedRematch}
+        <button
+            on:click={() => sendRematch()}
+            style="width: 260px; margin-top: 2rem; font-size: 1.4rem;"
         >
-        🔁 Rematch
-      </button>
+            🔁 Rematch
+        </button>
+        {:else}
+        <div style="color: #00ff00; font-size: 1.2rem; margin-top: 1.5rem;">
+            ✔ You voted for a rematch — waiting for opponent...
+        </div>
+      {/if}
+
     {/if}
 
   {/if}
