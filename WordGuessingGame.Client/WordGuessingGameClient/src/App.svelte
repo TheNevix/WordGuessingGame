@@ -15,6 +15,7 @@
   let currentTurn = null;
   let rematchCount = 0;
   let hasVotedRematch = false;
+  let version = "v1.0.0";
 
   onMount(() => {
     // Build connection ONCE
@@ -212,6 +213,16 @@
   color: #00ff00;
   border-radius: 6px;
 }
+.version-label {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  color: #00ff00;
+  font-size: 0.9rem;
+  opacity: 0.7;
+  font-family: monospace;
+  pointer-events: none;
+}
 </style>
 
 <div class="container">
@@ -307,4 +318,8 @@
 
   {/if}
 
+</div>
+
+<div class="version-label">
+    {version}
 </div>

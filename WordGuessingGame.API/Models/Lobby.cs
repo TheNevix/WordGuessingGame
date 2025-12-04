@@ -52,8 +52,6 @@
 
         public void DisconnectPlayer(string connectionId)
         {
-            _playerToGame.Remove(connectionId);
-
             var newQueue = new Queue<User>();
 
             foreach (var player in _waitingPlayers)
@@ -68,6 +66,11 @@
             {
                 _waitingPlayers.Enqueue(p);
             }
+        }
+
+        public void RemovePlayerToGame(string connectionId)
+        {
+            _playerToGame.Remove(connectionId);
         }
 
         public void EndGame(Guid gameId)

@@ -110,6 +110,8 @@ namespace WordGuessingGame.API.Services
             // Remove the named player
             _namedPlayers.Remove(connectionId);
             _pendingPlayers.Remove(connectionId);
+            _lobby.RemovePlayerToGame(connectionId);
+            _lobby.RemovePlayerToGame(opponent.ConnectionId);
             _lobby.DisconnectPlayer(connectionId);
 
             // Remove the game
