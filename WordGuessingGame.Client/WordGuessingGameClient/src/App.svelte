@@ -4,7 +4,18 @@
 
   // ── Auth / page state ──────────────────────────────────────────
   // 'login' | 'register' | 'dashboard' | 'lobby'
-  let page = "login";
+  function isTokenExpired(token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000 < Date.now();
+    } catch { return true; }
+  }
+
+  const _storedToken = localStorage.getItem("token");
+  let page = (_storedToken && !isTokenExpired(_storedToken)) ? "dashboard" : "login";
+  let text = localStorage.getItem("username") ?? "";
+
+  let rememberMe = false;
 
   let loginUsername = "";
   let loginPassword = "";
@@ -21,7 +32,6 @@
   let guestName = "";
 
   // ── Game state ─────────────────────────────────────────────────
-  let text = "";
   let connection;
   let isWaiting = false;
   let gameStarted = false;
@@ -39,6 +49,30 @@
   // ── Auth handlers ──────────────────────────────────────────────
   const API_BASE = import.meta.env.VITE_API_BASE;
 
+  async function tryRefreshToken() {
+    const storedRefresh = localStorage.getItem("refreshToken");
+    if (!storedRefresh) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: storedRefresh })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        text = data.username;
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("username", data.username);
+        if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
+        page = "dashboard";
+      } else {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        localStorage.removeItem("refreshToken");
+      }
+    } catch { /* network error — stay on login */ }
+  }
+
   let loginLoading = false;
   let regLoading = false;
 
@@ -54,7 +88,7 @@
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword })
+        body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword, rememberMe })
       });
 
       const data = await res.json();
@@ -67,6 +101,8 @@
       isGuest = false;
       text = data.username;
       localStorage.setItem("token", data.token);
+      localStorage.setItem("username", data.username);
+      if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
       page = "dashboard";
     } catch {
       loginError = "Could not reach the server.";
@@ -122,7 +158,17 @@
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    const storedRefresh = localStorage.getItem("refreshToken");
+    if (storedRefresh) {
+      try {
+        await fetch(`${API_BASE}/api/auth/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: storedRefresh })
+        });
+      } catch { /* ignore network errors on logout */ }
+    }
     loginUsername = "";
     loginPassword = "";
     text = "";
@@ -130,14 +176,28 @@
     isWaiting = false;
     gameStarted = false;
     localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("refreshToken");
     page = "login";
   }
 
   // ── SignalR setup ──────────────────────────────────────────────
-  onMount(() => {
+  onMount(async () => {
+    // Auto-refresh if access token expired but refresh token exists
+    const t = localStorage.getItem("token");
+    if ((!t || isTokenExpired(t)) && localStorage.getItem("refreshToken")) {
+      await tryRefreshToken();
+    }
+
     connection = new signalR.HubConnectionBuilder()
       .withUrl(`${API_BASE}/gamehub`, {
-        accessTokenFactory: () => localStorage.getItem("token") ?? ""
+        accessTokenFactory: async () => {
+          const token = localStorage.getItem("token");
+          if (!token || isTokenExpired(token)) {
+            await tryRefreshToken();
+          }
+          return localStorage.getItem("token") ?? "";
+        }
       })
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Information)
@@ -512,6 +572,22 @@
 
   input::placeholder { color: #c4b5fd; }
 
+  .remember-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    color: #6d28d9;
+    cursor: pointer;
+    width: 100%;
+  }
+  .remember-row input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    accent-color: #7c3aed;
+    cursor: pointer;
+  }
+
   /* ════════════════════════════════
      Buttons
   ════════════════════════════════ */
@@ -751,6 +827,11 @@
           <input type="password" bind:value={loginPassword} placeholder="Enter password"
             on:keydown={(e) => e.key === 'Enter' && handleLogin()} />
         </div>
+
+        <label class="remember-row">
+          <input type="checkbox" bind:checked={rememberMe} />
+          Remember me
+        </label>
 
         {#if loginError}<p class="error-text">{loginError}</p>{/if}
 

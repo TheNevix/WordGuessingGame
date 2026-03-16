@@ -36,4 +36,22 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+    {
+        var response = await _authService.RefreshAsync(request.RefreshToken);
+
+        if (response is null)
+            return Unauthorized(new { message = "Invalid or expired refresh token." });
+
+        return Ok(response);
+    }
+
+    [HttpPost("revoke")]
+    public async Task<IActionResult> Revoke([FromBody] RefreshRequest request)
+    {
+        await _authService.RevokeAsync(request.RefreshToken);
+        return Ok();
+    }
 }
