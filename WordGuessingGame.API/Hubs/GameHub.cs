@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.SignalR;
 using WordGuessingGame.API.Models;
 using WordGuessingGame.API.Services;
 
@@ -13,6 +14,13 @@ namespace WordGuessingGame.API.Hubs
             _gameService = gameService;
         }
 
+        // Returns the authenticated user's DB id, or null for guests
+        private int? GetAuthUserId()
+        {
+            var claim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(claim, out var id) ? id : null;
+        }
+
         public override Task OnConnectedAsync()
         {
             _gameService.AddPendingConnection(Context.ConnectionId);
@@ -21,8 +29,7 @@ namespace WordGuessingGame.API.Hubs
 
         public async Task RegisterName(string name)
         {
-            // Finalize the player
-            var player = _gameService.RegisterName(Context.ConnectionId, name);
+            await _gameService.RegisterName(Context.ConnectionId, name, GetAuthUserId());
         }
 
         // Can be a letter or a word

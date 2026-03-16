@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using WordGuessingGame.API.Hubs;
 using WordGuessingGame.API.Models;
+using WordGuessingGame.Core.Models;
+using WordGuessingGame.Repository.Interfaces;
 
 namespace WordGuessingGame.API.Services
 {
@@ -9,14 +12,16 @@ namespace WordGuessingGame.API.Services
         private readonly Lobby _lobby;
         private readonly WordList _wordList;
         private readonly IHubContext<GameHub> _hub;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly Dictionary<string, User> _pendingPlayers = new();
         private readonly Dictionary<string, User> _namedPlayers = new();
 
-        public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub)
+        public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory)
         {
             _lobby = lobby;
             _wordList = wordList;
             _hub = hub;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task AddPendingConnection(string connectionId)
@@ -25,10 +30,11 @@ namespace WordGuessingGame.API.Services
             await _hub.Clients.Client(connectionId).SendAsync("Connected", connectionId);
         }
 
-        public async Task RegisterName(string connectionId, string name)
+        public async Task RegisterName(string connectionId, string name, int? appUserId)
         {
             var player = _pendingPlayers[connectionId];
             player.Username = name;
+            player.AppUserId = appUserId;
 
             // Move to named players
             _pendingPlayers.Remove(connectionId);
@@ -125,9 +131,9 @@ namespace WordGuessingGame.API.Services
         {
             var game = _lobby.GetGameByPlayerId(connectionId);
 
-            var guessLength = guess.Length;
+            game.TotalGuesses++;
 
-            if (guessLength == 1)
+            if (guess.Length == 1)
             {
                 await HandleCharGuess(game, connectionId, guess[0]);
             }
@@ -199,17 +205,35 @@ namespace WordGuessingGame.API.Services
         {
             game.IsGuessed = true;
 
-            var user = game.Player1?.ConnectionId == connectionId
-                ? game.Player1
-                : game.Player2;
+            var winner = game.Player1?.ConnectionId == connectionId ? game.Player1 : game.Player2;
+            var opponent = game.Player1?.ConnectionId == connectionId ? game.Player2 : game.Player1;
 
-            // Send message to clients
             await _hub.Clients.Group(game.GameId.ToString()).SendAsync("WordGuessed", new
             {
-                Message = $"{user.Username} has guessed the word '{game.CurrentWord}' correctly! Congratulations!",
-                Winner = user.Username,
+                Message = $"{winner!.Username} has guessed the word '{game.CurrentWord}' correctly! Congratulations!",
+                Winner = winner.Username,
                 Word = game.CurrentWord
             });
+
+            // Save history if at least one player is authenticated
+            if (winner.AppUserId.HasValue || opponent!.AppUserId.HasValue)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var repo = scope.ServiceProvider.GetRequiredService<IGameHistoryRepository>();
+
+                await repo.AddAsync(new GameHistory
+                {
+                    Word = game.CurrentWord,
+                    WinnerUsername = winner.Username,
+                    WinnerUserId = winner.AppUserId,
+                    OpponentUsername = opponent!.Username,
+                    OpponentUserId = opponent.AppUserId,
+                    TotalGuesses = game.TotalGuesses,
+                    PlayedAt = DateTime.UtcNow
+                });
+
+                await repo.SaveChangesAsync();
+            }
         }
 
         private async Task PrepareForNextGuess(GameState game, string connectionId, List<int> guessedLetterAppearsOnIndexes, string guess, bool didAlreadyExist = false)
@@ -320,6 +344,7 @@ namespace WordGuessingGame.API.Services
             game.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
             game.GuessedLetters.Clear();
             game.IsGuessed = false;
+            game.TotalGuesses = 0;
             game.CurrentTurnUsername = game.Player1?.ConnectionId ?? string.Empty;
         }
 

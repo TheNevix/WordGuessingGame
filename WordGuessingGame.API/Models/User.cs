@@ -4,6 +4,7 @@
     {
         public string ConnectionId { get; set; }
         public string Username { get; set; } = string.Empty;
+        public int? AppUserId { get; set; } // null for guests
 
         public User(string connectionId)
         {

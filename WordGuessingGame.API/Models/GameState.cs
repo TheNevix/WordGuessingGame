@@ -12,6 +12,7 @@ namespace WordGuessingGame.API.Models
         public User? Player2 { get; set; } = null;
         public string CurrentTurnUsername { get; set; } = string.Empty;
         public List<bool> Rematch { get; set; } = new List<bool> { false, false };
+        public int TotalGuesses { get; set; } = 0;
 
         public GameState(Guid gameId, User opponent, User user)
         {
