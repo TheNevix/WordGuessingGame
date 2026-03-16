@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿using System.Security.Cryptography;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using WordGuessingGame.API.Hubs;
 using WordGuessingGame.API.Models;
@@ -15,6 +16,8 @@ namespace WordGuessingGame.API.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly Dictionary<string, User> _pendingPlayers = new();
         private readonly Dictionary<string, User> _namedPlayers = new();
+        private record PrivateLobbyEntry(User Creator, DateTime ExpiresAt);
+        private readonly Dictionary<string, PrivateLobbyEntry> _privateLobbies = new();
 
         public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory)
         {
@@ -62,6 +65,21 @@ namespace WordGuessingGame.API.Services
 
         public async Task StartGame(GameState game)
         {
+            // Fetch profile pictures for authenticated players
+            await FetchProfilePictures(game);
+
+            // Notify clients that a match was found (show countdown)
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("MatchFound", new
+            {
+                Player1 = game.Player1?.Username,
+                Player2 = game.Player2?.Username,
+                Player1Pfp = game.Player1?.ProfilePictureUrl,
+                Player2Pfp = game.Player2?.ProfilePictureUrl,
+            });
+
+            // 5-second countdown before starting
+            await Task.Delay(5000);
+
             // Generates a word, resets game state, and notifies clients
             GenerateAndClearState(game);
 
@@ -72,6 +90,24 @@ namespace WordGuessingGame.API.Services
                 Player2 = game.Player2?.Username,
                 Turn = game.Player1.Username,
             });
+        }
+
+        private async Task FetchProfilePictures(GameState game)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var userRepo = scope.ServiceProvider.GetRequiredService<WordGuessingGame.Repository.Interfaces.IUserRepository>();
+
+            if (game.Player1?.AppUserId.HasValue == true)
+            {
+                var dbUser = await userRepo.GetByIdAsync(game.Player1.AppUserId.Value);
+                if (dbUser != null) game.Player1.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+            }
+
+            if (game.Player2?.AppUserId.HasValue == true)
+            {
+                var dbUser = await userRepo.GetByIdAsync(game.Player2.AppUserId.Value);
+                if (dbUser != null) game.Player2.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+            }
         }
 
         public async Task RematchAsync(string connectionId)
@@ -94,6 +130,10 @@ namespace WordGuessingGame.API.Services
         // 2 options: player disconnects during game, player disconnects while waiting
         public async Task DisconnectAsync(string connectionId)
         {
+            // Clean up any private lobby this player created
+            var expiredCodes = _privateLobbies.Where(kv => kv.Value.Creator.ConnectionId == connectionId).Select(kv => kv.Key).ToList();
+            foreach (var key in expiredCodes) _privateLobbies.Remove(key);
+
             // *******Still in lobby
             var game = _lobby.GetGameByPlayerId(connectionId);
 
@@ -123,8 +163,9 @@ namespace WordGuessingGame.API.Services
             // Remove the game
             _lobby.EndGame(game.GameId);
 
-            // Move the other player back to waiting
-            _lobby.JoinPlayer(opponent);
+            // Only put opponent back in public queue for public games
+            if (!game.IsPrivate)
+                _lobby.JoinPlayer(opponent);
         }
 
         public async Task GuessAsync(string connectionId, string guess)
@@ -336,6 +377,56 @@ namespace WordGuessingGame.API.Services
             }
 
             return indexes;
+        }
+
+        public string CreatePrivateLobby(string connectionId, string name, int? appUserId)
+        {
+            var player = _pendingPlayers[connectionId];
+            player.Username = name;
+            player.AppUserId = appUserId;
+
+            _pendingPlayers.Remove(connectionId);
+            _namedPlayers[connectionId] = player;
+
+            var code = GeneratePrivateCode();
+            _privateLobbies[code] = new PrivateLobbyEntry(player, DateTime.UtcNow.AddMinutes(10));
+            return code;
+        }
+
+        public async Task JoinPrivateLobbyAsync(string connectionId, string name, int? appUserId, string code)
+        {
+            var upperCode = code.ToUpper();
+
+            if (!_privateLobbies.TryGetValue(upperCode, out var entry) || DateTime.UtcNow > entry.ExpiresAt)
+            {
+                _privateLobbies.Remove(upperCode);
+                await _hub.Clients.Client(connectionId).SendAsync("PrivateLobbyError", "Invalid or expired invite code.");
+                return;
+            }
+
+            _privateLobbies.Remove(upperCode);
+
+            var joiner = _pendingPlayers[connectionId];
+            joiner.Username = name;
+            joiner.AppUserId = appUserId;
+            _pendingPlayers.Remove(connectionId);
+            _namedPlayers[connectionId] = joiner;
+
+            var gameId = Guid.NewGuid();
+            var game = _lobby.StartPrivateGame(gameId, entry.Creator, joiner);
+
+            await _hub.Groups.AddToGroupAsync(entry.Creator.ConnectionId, gameId.ToString());
+            await _hub.Groups.AddToGroupAsync(joiner.ConnectionId, gameId.ToString());
+
+            await StartGame(game);
+        }
+
+        private static string GeneratePrivateCode()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var bytes = new byte[6];
+            RandomNumberGenerator.Fill(bytes);
+            return new string(bytes.Select(b => chars[b % chars.Length]).ToArray());
         }
 
         private void GenerateAndClearState(GameState game)

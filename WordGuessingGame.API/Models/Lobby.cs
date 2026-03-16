@@ -50,6 +50,15 @@
             return null; // Player is not in a game yet
         }
 
+        public GameState StartPrivateGame(Guid gameId, User player1, User player2)
+        {
+            var game = new GameState(gameId, player1, player2) { IsPrivate = true };
+            _playerToGame[player1.ConnectionId] = gameId;
+            _playerToGame[player2.ConnectionId] = gameId;
+            _games.Add(gameId, game);
+            return game;
+        }
+
         public void DisconnectPlayer(string connectionId)
         {
             var newQueue = new Queue<User>();

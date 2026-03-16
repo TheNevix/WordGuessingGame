@@ -14,6 +14,9 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
+    public async Task<AppUser?> GetByIdAsync(int id) =>
+        await _context.Users.FindAsync(id);
+
     public async Task<AppUser?> GetByUsernameAsync(string username) =>
         await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
 

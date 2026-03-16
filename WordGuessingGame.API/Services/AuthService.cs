@@ -34,7 +34,8 @@ public class AuthService : IAuthService
         var response = new AuthResponse
         {
             Token = GenerateAccessToken(user, request.RememberMe),
-            Username = user.Username
+            Username = user.Username,
+            ProfilePictureUrl = user.ProfilePictureUrl
         };
 
         if (request.RememberMe)
@@ -64,7 +65,8 @@ public class AuthService : IAuthService
         return new AuthResponse
         {
             Token = GenerateAccessToken(user, rememberMe: false),
-            Username = user.Username
+            Username = user.Username,
+            ProfilePictureUrl = user.ProfilePictureUrl
         };
     }
 
@@ -83,7 +85,8 @@ public class AuthService : IAuthService
         {
             Token = GenerateAccessToken(token.User, rememberMe: true),
             Username = token.User.Username,
-            RefreshToken = newRefreshToken
+            RefreshToken = newRefreshToken,
+            ProfilePictureUrl = token.User.ProfilePictureUrl
         };
     }
 

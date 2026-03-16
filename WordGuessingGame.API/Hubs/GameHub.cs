@@ -32,6 +32,17 @@ namespace WordGuessingGame.API.Hubs
             await _gameService.RegisterName(Context.ConnectionId, name, GetAuthUserId());
         }
 
+        public async Task CreatePrivateLobby(string name)
+        {
+            var code = _gameService.CreatePrivateLobby(Context.ConnectionId, name, GetAuthUserId());
+            await Clients.Caller.SendAsync("PrivateLobbyCreated", code);
+        }
+
+        public async Task JoinPrivateLobby(string code, string name)
+        {
+            await _gameService.JoinPrivateLobbyAsync(Context.ConnectionId, name, GetAuthUserId(), code);
+        }
+
         // Can be a letter or a word
         public async Task Guess(string guess)
         {
