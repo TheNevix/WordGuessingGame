@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 # Local settings with secrets (connection strings, JWT keys)
 appsettings.Local.json
+WordGuessingGame.Client/WordGuessingGameClient/.env.production
