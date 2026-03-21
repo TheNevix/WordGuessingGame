@@ -75,7 +75,12 @@ namespace WordGuessingGame.API
                         .AllowAnyMethod()
                         .AllowAnyHeader()
                         .AllowCredentials()
-                        .WithOrigins("http://localhost:5173", "https://raadhetwoord.be", "https://www.raadhetwoord.be");
+                        .WithOrigins(
+                            "http://localhost:5173",
+                            "https://raadhetwoord.be",
+                            "http://raadhetwoord.be",
+                            "https://www.raadhetwoord.be",
+                            "http://www.raadhetwoord.be");
                 });
             });
 

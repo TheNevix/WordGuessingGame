@@ -251,8 +251,7 @@ namespace WordGuessingGame.API.Services
 
             await _hub.Clients.Group(game.GameId.ToString()).SendAsync("WordGuessed", new
             {
-                Message = $"{winner!.Username} has guessed the word '{game.CurrentWord}' correctly! Congratulations!",
-                Winner = winner.Username,
+                Winner = winner!.Username,
                 Word = game.CurrentWord
             });
 
@@ -296,44 +295,45 @@ namespace WordGuessingGame.API.Services
             // Notify clients about turn change
             if (didAlreadyExist && guess.Length == 1)
             {
-                // Notify about already guessed letter
                 await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
+                    Username = user.Username,
                     Guess = guess,
-                    Message = $"{user.Username} has guessed '{guess}'. The guessed letter was already guessed before.",
+                    MessageType = "letter_duplicate",
                     CorrectGuess = false,
                     Turn = opponent.Username,
                 });
             }
             else if (guessedLetterAppearsOnIndexes.Count == 0 && guess.Length == 1)
             {
-                // Notify about incorrect guess
                 await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
+                    Username = user.Username,
                     Guess = guess,
-                    Message = $"{user.Username} has guessed '{guess}'. The word does not contain the letter '{guess}'.",
+                    MessageType = "letter_wrong",
                     CorrectGuess = false,
                     Turn = opponent.Username,
                 });
             }
-            else if (guessedLetterAppearsOnIndexes.Count > 0 && guess.Length == 1) // Notify about correct guess
+            else if (guessedLetterAppearsOnIndexes.Count > 0 && guess.Length == 1)
             {
-                // Notify about incorrect guess
                 await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
+                    Username = user.Username,
                     Guess = guess,
-                    Message = $"{user.Username} has guessed '{guess}'!",
+                    MessageType = "letter_correct",
                     CorrectGuess = true,
                     Indexes = guessedLetterAppearsOnIndexes,
                     Turn = opponent.Username,
                 });
             }
-            else // Notify about incorrect word guess
+            else
             {
                 await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Guessed", new
                 {
+                    Username = user.Username,
                     Guess = guess,
-                    Message = $"{user.Username} has guessed the word '{guess}'! That was not the word that we are searching!",
+                    MessageType = "word_wrong",
                     CorrectGuess = false,
                     Turn = opponent.Username,
                 });
@@ -433,6 +433,7 @@ namespace WordGuessingGame.API.Services
         {
             game.Rematch = new List<bool> { false, false };
             game.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
+            Console.WriteLine($"[DEBUG] Word selected: {game.CurrentWord}");
             game.GuessedLetters.Clear();
             game.IsGuessed = false;
             game.TotalGuesses = 0;

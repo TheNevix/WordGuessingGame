@@ -22,6 +22,9 @@ public class AuthService : IAuthService
         _config = config;
     }
 
+    private static string MapLanguage(Core.Models.Language lang) =>
+        lang == Core.Models.Language.English ? "en" : "nl";
+
     public async Task<AuthResponse?> LoginAsync(LoginRequest request)
     {
         var user = await _userRepository.GetByUsernameAsync(request.Username);
@@ -35,7 +38,8 @@ public class AuthService : IAuthService
         {
             Token = GenerateAccessToken(user, request.RememberMe),
             Username = user.Username,
-            ProfilePictureUrl = user.ProfilePictureUrl
+            ProfilePictureUrl = user.ProfilePictureUrl,
+            Language = MapLanguage(user.Language)
         };
 
         if (request.RememberMe)
@@ -66,7 +70,8 @@ public class AuthService : IAuthService
         {
             Token = GenerateAccessToken(user, rememberMe: false),
             Username = user.Username,
-            ProfilePictureUrl = user.ProfilePictureUrl
+            ProfilePictureUrl = user.ProfilePictureUrl,
+            Language = MapLanguage(user.Language)
         };
     }
 
@@ -86,7 +91,8 @@ public class AuthService : IAuthService
             Token = GenerateAccessToken(token.User, rememberMe: true),
             Username = token.User.Username,
             RefreshToken = newRefreshToken,
-            ProfilePictureUrl = token.User.ProfilePictureUrl
+            ProfilePictureUrl = token.User.ProfilePictureUrl,
+            Language = MapLanguage(token.User.Language)
         };
     }
 

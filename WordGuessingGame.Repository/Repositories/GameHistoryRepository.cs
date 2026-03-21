@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using WordGuessingGame.Core.Data;
 using WordGuessingGame.Core.Models;
 using WordGuessingGame.Repository.Interfaces;
@@ -18,4 +19,10 @@ public class GameHistoryRepository : IGameHistoryRepository
 
     public async Task SaveChangesAsync() =>
         await _context.SaveChangesAsync();
+
+    public async Task<List<GameHistory>> GetByUserIdAsync(int userId) =>
+        await _context.GameHistories
+            .Where(g => g.WinnerUserId == userId || g.OpponentUserId == userId)
+            .OrderByDescending(g => g.PlayedAt)
+            .ToListAsync();
 }

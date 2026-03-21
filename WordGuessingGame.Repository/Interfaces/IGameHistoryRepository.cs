@@ -6,4 +6,5 @@ public interface IGameHistoryRepository
 {
     Task AddAsync(GameHistory gameHistory);
     Task SaveChangesAsync();
+    Task<List<GameHistory>> GetByUserIdAsync(int userId);
 }
