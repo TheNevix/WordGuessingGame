@@ -5,7 +5,7 @@ import {
   isWaiting, matchData, matchCountdown, isRematch,
   gameStarted, gameInformation, logMessages, letters,
   chatMessage, winnerMessage, isWon, rematchCount,
-  currentTurn, hasVotedRematch,
+  currentTurn, hasVotedRematch, opponentLeft,
   privateLobbyLink, privateLobbyError, linkExpiresIn,
   inviteCode
 } from './stores.js';
@@ -87,8 +87,11 @@ export function initHub() {
   conn.on("Rematch", () => { rematchCount.update(n => n + 1); });
 
   conn.on("Disconnected", () => {
-    isWaiting.set(true);
     gameStarted.set(false);
+    isWaiting.set(false);
+    matchData.set(null);
+    opponentLeft.set(true);
+    page.set('dashboard');
   });
 
   conn.on("MatchFound", (data) => {

@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { page, username, profilePicUrl, bannerColor, userTags, activeTag } from '../stores.js';
+  import { page, username, profilePicUrl, bannerColor, userTags, activeTag, opponentLeft } from '../stores.js';
   import { handleLogout, fetchStats, fetchChallenges, claimChallenge, setActiveTag } from '../api.js';
   import { t } from '../i18n.js';
   import Banner from '../components/Banner.svelte';
@@ -19,6 +19,10 @@
   onMount(async () => {
     try { stats = await fetchStats(); } catch { /* keep defaults */ }
     try { challenges = await fetchChallenges(); } catch { /* keep defaults */ }
+
+    if ($opponentLeft) {
+      setTimeout(() => opponentLeft.set(false), 4000);
+    }
   });
 
   async function handleClaim(challenge) {
@@ -60,6 +64,10 @@
 </script>
 
 <div class="dashboard-layout">
+
+  {#if $opponentLeft}
+    <div class="toast toast-warning">{$t('game.opponent_left')}</div>
+  {/if}
 
   <!-- Navbar -->
   <nav class="navbar">

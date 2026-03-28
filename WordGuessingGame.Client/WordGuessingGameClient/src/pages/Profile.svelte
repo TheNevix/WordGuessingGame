@@ -13,8 +13,6 @@
   let langSaving      = false;
 
   let selectedColor  = $bannerColor;
-  let colorSaved     = false;
-  let colorSaving    = false;
 
   const PALETTE = [
     '#5b21b6', '#7c3aed', '#6d28d9',
@@ -46,15 +44,9 @@
     }
   }
 
-  async function doSaveBannerColor() {
-    colorSaving = true;
-    try {
-      await saveBannerColor(selectedColor);
-      colorSaved = true;
-      setTimeout(() => (colorSaved = false), 2500);
-    } catch { /* ignore */ } finally {
-      colorSaving = false;
-    }
+  async function pickColor(color) {
+    selectedColor = color;
+    await saveBannerColor(color);
   }
 </script>
 
@@ -108,16 +100,10 @@
                 <button
                   class="color-swatch {selectedColor === color ? 'swatch-active' : ''}"
                   style="background:{color}"
-                  on:click={() => (selectedColor = color)}
+                  on:click={() => pickColor(color)}
                   title={color}
                 ></button>
               {/each}
-            </div>
-            <div style="margin-top:0.85rem;display:flex;align-items:center;gap:0.75rem">
-              <button class="btn-sm" style="width:auto" on:click={doSaveBannerColor} disabled={colorSaving}>
-                {colorSaving ? $t('profile.saving') : $t('profile.save')}
-              </button>
-              {#if colorSaved}<p class="success-text" style="font-size:0.85rem;margin:0">{$t('profile.banner_saved')}</p>{/if}
             </div>
           </div>
 

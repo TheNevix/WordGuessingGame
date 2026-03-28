@@ -32,6 +32,7 @@ export const bannerColor   = writable(localStorage.getItem("bannerColor") ?? "#5
 export const userTags      = writable(JSON.parse(localStorage.getItem("userTags") ?? "[]"));
 export const activeTag     = writable(localStorage.getItem("activeTag") ?? null);
 export const isGuest       = writable(false);
+export const opponentLeft  = writable(false);
 
 // ── Private lobby ─────────────────────────────────────────────
 export const inviteCode        = writable(_inviteCode);

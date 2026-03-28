@@ -144,6 +144,7 @@
   "countdown.starts_now": "Game starts now...",
 
   "game.badge": "🎮 In Game",
+  "game.opponent_left": "Your opponent left the game.",
   "game.you": "You",
   "game.letters": "{revealed}/{total} letters",
   "game.guess_word": "Guess the word",
