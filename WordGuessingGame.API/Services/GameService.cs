@@ -151,10 +151,20 @@ namespace WordGuessingGame.API.Services
 
             var rematchCount = game.Rematch.Where(r => r).Count();
 
+            var opponent = game.Player1?.ConnectionId == connectionId ? game.Player2 : game.Player1;
+            var opponentIsBot = opponent?.IsBot ?? false;
+
             if (rematchCount == 0)
             {
                 game.Rematch[0] = true;
                 await _hub.Clients.Group(game.GameId.ToString()).SendAsync("Rematch");
+
+                if (opponentIsBot)
+                {
+                    game.Rematch[1] = true;
+                    await StartGame(game);
+                    return;
+                }
             }
             else
             {
