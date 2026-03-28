@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WordGuessingGame.Core.Data;
 
@@ -11,9 +12,11 @@ using WordGuessingGame.Core.Data;
 namespace WordGuessingGame.Core.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260321213642_AddBannerColorAndTags")]
+    partial class AddBannerColorAndTags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -30,9 +33,6 @@ namespace WordGuessingGame.Core.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ActiveTag")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("BannerColor")
                         .IsRequired()
@@ -70,58 +70,6 @@ namespace WordGuessingGame.Core.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", "wgg");
-                });
-
-            modelBuilder.Entity("WordGuessingGame.Core.Models.Challenge", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("RewardType")
-                        .HasColumnType("int");
-
-                    b.Property<string>("RewardValue")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("TargetValue")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Challenges", "wgg");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Key = "win_5_games",
-                            RewardType = 0,
-                            RewardValue = "Veteran",
-                            TargetValue = 5,
-                            Type = 0
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Key = "win_streak_5",
-                            RewardType = 1,
-                            RewardValue = "#d97706",
-                            TargetValue = 5,
-                            Type = 1
-                        });
                 });
 
             modelBuilder.Entity("WordGuessingGame.Core.Models.GameHistory", b =>
@@ -200,42 +148,6 @@ namespace WordGuessingGame.Core.Migrations
                     b.ToTable("RefreshTokens", "wgg");
                 });
 
-            modelBuilder.Entity("WordGuessingGame.Core.Models.UserChallenge", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ChallengeId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsClaimed")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsCompleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("Progress")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChallengeId");
-
-                    b.HasIndex("UserId", "ChallengeId")
-                        .IsUnique();
-
-                    b.ToTable("UserChallenges", "wgg");
-                });
-
             modelBuilder.Entity("WordGuessingGame.Core.Models.UserTag", b =>
                 {
                     b.Property<int>("Id")
@@ -287,25 +199,6 @@ namespace WordGuessingGame.Core.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("WordGuessingGame.Core.Models.UserChallenge", b =>
-                {
-                    b.HasOne("WordGuessingGame.Core.Models.Challenge", "Challenge")
-                        .WithMany("UserChallenges")
-                        .HasForeignKey("ChallengeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("WordGuessingGame.Core.Models.AppUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Challenge");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("WordGuessingGame.Core.Models.UserTag", b =>
                 {
                     b.HasOne("WordGuessingGame.Core.Models.AppUser", "User")
@@ -322,11 +215,6 @@ namespace WordGuessingGame.Core.Migrations
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("Tags");
-                });
-
-            modelBuilder.Entity("WordGuessingGame.Core.Models.Challenge", b =>
-                {
-                    b.Navigation("UserChallenges");
                 });
 #pragma warning restore 612, 618
         }

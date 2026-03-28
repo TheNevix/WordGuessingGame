@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import {
-  page, username, profilePicUrl, isGuest, isWaiting, gameStarted, inviteCode
+  page, username, profilePicUrl, bannerColor, userTags, activeTag, isGuest, isWaiting, gameStarted, inviteCode
 } from './stores.js';
 import { isTokenExpired } from './stores.js';
 import { setLocale } from './i18n.js';
@@ -25,6 +25,21 @@ export async function tryRefreshToken() {
       if (data.profilePictureUrl) {
         profilePicUrl.set(data.profilePictureUrl);
         localStorage.setItem("profilePicUrl", data.profilePictureUrl);
+      }
+      if (data.bannerColor) {
+        bannerColor.set(data.bannerColor);
+        localStorage.setItem("bannerColor", data.bannerColor);
+      }
+      if (data.tags) {
+        userTags.set(data.tags);
+        localStorage.setItem("userTags", JSON.stringify(data.tags));
+      }
+      if (data.activeTag) {
+        activeTag.set(data.activeTag);
+        localStorage.setItem("activeTag", data.activeTag);
+      } else {
+        activeTag.set(null);
+        localStorage.removeItem("activeTag");
       }
       if (data.language) setLocale(data.language);
       page.set("dashboard");
@@ -55,6 +70,19 @@ export async function handleLogin(loginUsername, loginPassword, rememberMe) {
   profilePicUrl.set(pfp);
   if (pfp) localStorage.setItem("profilePicUrl", pfp);
   else localStorage.removeItem("profilePicUrl");
+  const bc = data.bannerColor ?? "#5b21b6";
+  bannerColor.set(bc);
+  localStorage.setItem("bannerColor", bc);
+  const tags = data.tags ?? [];
+  userTags.set(tags);
+  localStorage.setItem("userTags", JSON.stringify(tags));
+  if (data.activeTag) {
+    activeTag.set(data.activeTag);
+    localStorage.setItem("activeTag", data.activeTag);
+  } else {
+    activeTag.set(null);
+    localStorage.removeItem("activeTag");
+  }
   if (data.language) setLocale(data.language);
   page.set(get(inviteCode) ? "join-private" : "dashboard");
 }
@@ -69,6 +97,26 @@ export async function handleRegister(regUsername, regEmail, regPassword) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Registration failed.");
   localStorage.setItem("token", data.token);
+  username.set(data.username);
+  localStorage.setItem("username", data.username);
+  const pfp = data.profilePictureUrl ?? "";
+  profilePicUrl.set(pfp);
+  if (pfp) localStorage.setItem("profilePicUrl", pfp);
+  else localStorage.removeItem("profilePicUrl");
+  const bc = data.bannerColor ?? "#5b21b6";
+  bannerColor.set(bc);
+  localStorage.setItem("bannerColor", bc);
+  const tags = data.tags ?? [];
+  userTags.set(tags);
+  localStorage.setItem("userTags", JSON.stringify(tags));
+  if (data.activeTag) {
+    activeTag.set(data.activeTag);
+    localStorage.setItem("activeTag", data.activeTag);
+  } else {
+    activeTag.set(null);
+    localStorage.removeItem("activeTag");
+  }
+  if (data.language) setLocale(data.language);
 }
 
 export async function handleLogout() {
@@ -87,10 +135,16 @@ export async function handleLogout() {
   isWaiting.set(false);
   gameStarted.set(false);
   profilePicUrl.set("");
+  bannerColor.set("#5b21b6");
+  userTags.set([]);
+  activeTag.set(null);
   localStorage.removeItem("token");
   localStorage.removeItem("username");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("profilePicUrl");
+  localStorage.removeItem("bannerColor");
+  localStorage.removeItem("userTags");
+  localStorage.removeItem("activeTag");
   page.set("login");
 }
 
@@ -117,6 +171,66 @@ export async function fetchStats() {
     headers: { "Authorization": `Bearer ${token}` }
   });
   if (!res.ok) throw new Error("Failed to fetch stats.");
+  return res.json();
+}
+
+// Throws on failure.
+export async function saveBannerColor(color) {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  const res = await fetch(`${API_BASE}/api/user/banner-color`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ bannerColor: color })
+  });
+  if (!res.ok) throw new Error("Failed to save banner color.");
+  bannerColor.set(color);
+  localStorage.setItem("bannerColor", color);
+}
+
+export async function setActiveTag(tagName) {
+  const token = localStorage.getItem("token");
+  if (token) {
+    try {
+      await fetch(`${API_BASE}/api/user/active-tag`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ activeTag: tagName ?? null })
+      });
+    } catch { /* ignore, still update locally */ }
+  }
+  if (tagName) {
+    activeTag.set(tagName);
+    localStorage.setItem("activeTag", tagName);
+  } else {
+    activeTag.set(null);
+    localStorage.removeItem("activeTag");
+  }
+}
+
+// Returns array of ChallengeProgressResponse or throws.
+export async function fetchChallenges() {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Not authenticated.");
+  const res = await fetch(`${API_BASE}/api/user/challenges`, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to fetch challenges.");
+  return res.json();
+}
+
+// Returns { rewardType, rewardValue, tags, bannerColor } or throws.
+export async function claimChallenge(challengeId) {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Not authenticated.");
+  const res = await fetch(`${API_BASE}/api/user/challenges/${challengeId}/claim`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message ?? "Failed to claim challenge.");
+  }
   return res.json();
 }
 

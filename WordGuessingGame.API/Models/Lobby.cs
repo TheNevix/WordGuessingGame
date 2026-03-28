@@ -50,6 +50,27 @@
             return null; // Player is not in a game yet
         }
 
+        public bool IsWaiting(string connectionId) =>
+            _waitingPlayers.Any(p => p.ConnectionId == connectionId);
+
+        public GameState? StartBotGame(User human, User bot)
+        {
+            // Remove human from waiting queue first
+            var newQueue = new Queue<User>(_waitingPlayers.Where(p => p.ConnectionId != human.ConnectionId));
+            _waitingPlayers.Clear();
+            foreach (var p in newQueue) _waitingPlayers.Enqueue(p);
+
+            // Only start if the human is still waiting (not already matched)
+            if (_playerToGame.ContainsKey(human.ConnectionId)) return null;
+
+            var gameId = Guid.NewGuid();
+            var game = new GameState(gameId, human, bot);
+            _playerToGame[human.ConnectionId] = gameId;
+            _playerToGame[bot.ConnectionId]   = gameId;
+            _games.Add(gameId, game);
+            return game;
+        }
+
         public GameState StartPrivateGame(Guid gameId, User player1, User player2)
         {
             var game = new GameState(gameId, player1, player2) { IsPrivate = true };

@@ -9,5 +9,8 @@ public class AppUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? ProfilePictureUrl { get; set; }
     public Language Language { get; set; } = Language.Dutch;
+    public string BannerColor { get; set; } = "#5b21b6";
+    public string? ActiveTag { get; set; }
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<UserTag> Tags { get; set; } = new List<UserTag>();
 }

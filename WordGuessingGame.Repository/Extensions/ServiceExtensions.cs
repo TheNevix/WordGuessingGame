@@ -20,6 +20,7 @@ public static class ServiceExtensions
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IGameHistoryRepository, GameHistoryRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IUserChallengeRepository, UserChallengeRepository>();
 
         return services;
     }

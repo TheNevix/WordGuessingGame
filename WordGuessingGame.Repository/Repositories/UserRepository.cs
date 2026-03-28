@@ -15,10 +15,10 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<AppUser?> GetByIdAsync(int id) =>
-        await _context.Users.FindAsync(id);
+        await _context.Users.Include(u => u.Tags).FirstOrDefaultAsync(u => u.Id == id);
 
     public async Task<AppUser?> GetByUsernameAsync(string username) =>
-        await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        await _context.Users.Include(u => u.Tags).FirstOrDefaultAsync(u => u.Username == username);
 
     public async Task<AppUser?> GetByEmailAsync(string email) =>
         await _context.Users.FirstOrDefaultAsync(u => u.Email == email);

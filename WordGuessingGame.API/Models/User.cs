@@ -6,6 +6,10 @@
         public string Username { get; set; } = string.Empty;
         public int? AppUserId { get; set; } // null for guests
         public string? ProfilePictureUrl { get; set; }
+        public bool IsBot { get; set; } = false;
+        public string BannerColor { get; set; } = "#5b21b6";
+        public string? ActiveTag { get; set; }
+        public List<string> Tags { get; set; } = new();
 
         public User(string connectionId)
         {

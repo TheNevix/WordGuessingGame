@@ -1,8 +1,9 @@
 <script>
-  import { username, privateLobbyLink, linkExpiresIn } from '../stores.js';
+  import { username, profilePicUrl, bannerColor, activeTag, privateLobbyLink, linkExpiresIn } from '../stores.js';
   import { cancelWaiting } from '../hub.js';
   import { formatCountdown } from '../stores.js';
   import { t } from '../i18n.js';
+  import Banner from '../components/Banner.svelte';
 
   let linkCopied = false;
 
@@ -15,6 +16,18 @@
 
 <div class="auth-container">
   <div class="card">
+
+    <div class="waiting-banner-wrap">
+      <Banner
+        username={$username}
+        pfp={$profilePicUrl}
+        color={$bannerColor}
+        tags={$activeTag ? [$activeTag] : []}
+        isYou={true}
+        size="md"
+      />
+    </div>
+
     {#if $privateLobbyLink}
       <p class="status-text">{$t('waiting.waiting')}</p>
       <p class="subtitle">{$t('waiting.playing_as', { name: $username })}</p>

@@ -1,8 +1,9 @@
 <script>
   import { onDestroy } from 'svelte';
-  import { page, username, profilePicUrl, isGuest, isWaiting, matchData } from '../stores.js';
+  import { page, username, profilePicUrl, bannerColor, userTags, activeTag, isGuest, isWaiting, matchData } from '../stores.js';
   import { connectToHub, cancelWaiting } from '../hub.js';
   import { t } from '../i18n.js';
+  import Banner from '../components/Banner.svelte';
 
   let guestName = "";
   let elapsed   = 0;
@@ -24,6 +25,15 @@
   $: oppPfp = $matchData
     ? ($matchData.player1 === $username ? $matchData.player2Pfp : $matchData.player1Pfp)
     : null;
+  $: oppBannerColor = $matchData
+    ? ($matchData.player1 === $username ? $matchData.player2BannerColor : $matchData.player1BannerColor) ?? '#5b21b6'
+    : '#5b21b6';
+  $: oppActiveTag = $matchData
+    ? ($matchData.player1 === $username ? $matchData.player2ActiveTag : $matchData.player1ActiveTag)
+    : null;
+  $: oppTags = oppActiveTag ? [oppActiveTag] : [];
+
+  $: myName = $isGuest ? (guestName || 'Guest') : $username;
 
   onDestroy(() => { if (elapsedInterval) clearInterval(elapsedInterval); });
 
@@ -54,19 +64,14 @@
 
   <div class="lobby-arena">
 
-    <div class="player-card player-card-you">
-      <div class="player-card-avatar">
-        {#if $profilePicUrl && !$isGuest}
-          <img class="player-card-avatar-img" src={$profilePicUrl} alt={$username} />
-        {:else if $isGuest}
-          {guestName ? guestName.charAt(0).toUpperCase() : '?'}
-        {:else}
-          {$username.charAt(0).toUpperCase()}
-        {/if}
-      </div>
-      <p class="player-card-name">{$isGuest ? (guestName || 'Guest') : $username}</p>
-      <span class="player-card-tag">{$isGuest ? $t('lobby.guest_tag') : $t('lobby.rookie_tag')}</span>
-    </div>
+    <Banner
+      username={myName}
+      pfp={$isGuest ? null : $profilePicUrl}
+      color={$isGuest ? '#374151' : $bannerColor}
+      tags={$isGuest || !$activeTag ? [] : [$activeTag]}
+      isYou={true}
+      size="md"
+    />
 
     <div class="vs-divider">
       <div class="vs-ring">VS</div>
@@ -74,24 +79,26 @@
     </div>
 
     {#if $matchData}
-      <div class="player-card player-card-opponent player-card-found">
-        <div class="player-card-avatar">
-          {#if oppPfp}
-            <img class="player-card-avatar-img" src={oppPfp} alt={oppName} />
-          {:else}
-            {oppName?.charAt(0).toUpperCase()}
-          {/if}
-        </div>
-        <p class="player-card-name">{oppName}</p>
-        <span class="player-card-tag">{$t('lobby.ready_tag')}</span>
-      </div>
+      <Banner
+        username={oppName}
+        pfp={oppPfp}
+        color={oppBannerColor}
+        tags={oppTags}
+        size="md"
+      />
     {:else}
-      <div class="player-card player-card-opponent" class:player-card-searching={$isWaiting}>
-        <div class="player-card-avatar avatar-unknown" class:avatar-searching={$isWaiting}>
-          {$isWaiting ? '⟳' : '?'}
+      <div class="banner-card banner-md banner-ghost">
+        <div class="banner-content">
+          <div class="banner-pfp banner-pfp-ghost">
+            {$isWaiting ? '⟳' : '?'}
+          </div>
+          <div class="banner-info">
+            <span class="banner-name banner-name-ghost">
+              {$isWaiting ? $t('lobby.searching') : '???'}
+            </span>
+            <span class="banner-tag-ghost">{$isWaiting ? $t('lobby.looking_tag') : $t('lobby.waiting_tag')}</span>
+          </div>
         </div>
-        <p class="player-card-name">{$isWaiting ? $t('lobby.searching') : '???'}</p>
-        <span class="player-card-tag">{$isWaiting ? $t('lobby.looking_tag') : $t('lobby.waiting_tag')}</span>
       </div>
     {/if}
 

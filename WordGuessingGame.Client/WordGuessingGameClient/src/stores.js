@@ -28,6 +28,9 @@ export const page = writable(getInitialPage());
 // ── User ──────────────────────────────────────────────────────
 export const username      = writable(localStorage.getItem("username") ?? "");
 export const profilePicUrl = writable(localStorage.getItem("profilePicUrl") ?? "");
+export const bannerColor   = writable(localStorage.getItem("bannerColor") ?? "#5b21b6");
+export const userTags      = writable(JSON.parse(localStorage.getItem("userTags") ?? "[]"));
+export const activeTag     = writable(localStorage.getItem("activeTag") ?? null);
 export const isGuest       = writable(false);
 
 // ── Private lobby ─────────────────────────────────────────────

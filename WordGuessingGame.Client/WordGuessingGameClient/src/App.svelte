@@ -16,7 +16,7 @@
   import Game        from './pages/Game.svelte';
   import Profile     from './pages/Profile.svelte';
 
-  const version = "v1.2.0";
+  const version = "v1.3.2";
 
   onMount(async () => {
     const t = localStorage.getItem("token");

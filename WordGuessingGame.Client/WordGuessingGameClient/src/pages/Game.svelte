@@ -1,13 +1,15 @@
 <script>
   import { afterUpdate } from 'svelte';
   import {
-    username, profilePicUrl, gameInformation, matchData,
+    username, profilePicUrl, bannerColor, activeTag,
+    gameInformation, matchData,
     logMessages, letters, chatMessage,
     winnerMessage, isWon, currentTurn,
     rematchCount, hasVotedRematch
   } from '../stores.js';
   import { sendChat, sendRematch } from '../hub.js';
   import { t } from '../i18n.js';
+  import Banner from '../components/Banner.svelte';
 
   let logEl;
   afterUpdate(() => {
@@ -20,14 +22,61 @@
     ? ($gameInformation.player1 === $username ? $gameInformation.player2 : $gameInformation.player1)
     : null;
 
-  $: myPfp = $profilePicUrl;
   $: oppPfp = $matchData
     ? ($matchData.player1 === $username ? $matchData.player2Pfp : $matchData.player1Pfp)
     : null;
 
+  $: oppBannerColor = $matchData
+    ? ($matchData.player1 === $username ? $matchData.player2BannerColor : $matchData.player1BannerColor) ?? '#5b21b6'
+    : '#5b21b6';
+
+  $: oppActiveTag = $matchData
+    ? ($matchData.player1 === $username ? $matchData.player2ActiveTag : $matchData.player1ActiveTag)
+    : null;
+  $: oppTags = oppActiveTag ? [oppActiveTag] : [];
+
   $: revealedCount = $letters.filter(l => l !== '').length;
   $: totalLetters  = $letters.length;
   $: progress      = totalLetters > 0 ? (revealedCount / totalLetters) * 100 : 0;
+
+  // Keyboard
+  const KEYBOARD_ROWS = [
+    ['Q','W','E','R','T','Y','U','I','O','P'],
+    ['A','S','D','F','G','H','J','K','L'],
+    ['Z','X','C','V','B','N','M','⌫']
+  ];
+
+  let wordGuess = '';
+
+  $: guessedLetters = new Set(
+    $logMessages.flatMap(m => {
+      const match = m.match(/'([A-Za-z])'/);
+      return match ? [match[1].toUpperCase()] : [];
+    })
+  );
+  $: revealedLetters = new Set($letters.filter(l => l !== '').map(l => l.toUpperCase()));
+
+  function tapKey(key) {
+    if (key === '⌫') { wordGuess = wordGuess.slice(0, -1); return; }
+    if (!isMyTurn) return;
+    // Allow re-tapping revealed (correct) letters, block only wrong guesses
+    if (guessedLetters.has(key) && !revealedLetters.has(key)) return;
+    wordGuess += key;
+  }
+
+  function submitWord() {
+    const w = wordGuess.trim().toLowerCase();
+    if (!w || !isMyTurn) return;
+    console.log('submitWord called, sending:', w);
+    sendChat(w);
+    wordGuess = '';
+  }
+
+  function keyState(key) {
+    if (revealedLetters.has(key)) return 'correct';
+    if (guessedLetters.has(key)) return 'wrong';
+    return 'normal';
+  }
 </script>
 
 <div class="game-layout">
@@ -43,20 +92,15 @@
 
     <div class="game-players-banner">
 
-      <div class="game-player {isMyTurn ? 'game-player-active' : ''}">
-        <div class="game-player-avatar">
-          {#if myPfp}
-            <img src={myPfp} alt={$username} />
-          {:else}
-            {$username.charAt(0).toUpperCase()}
-          {/if}
-          {#if isMyTurn}<div class="turn-dot"></div>{/if}
-        </div>
-        <span class="game-player-name">
-          {$username}
-          <span class="you-tag">{$t('game.you')}</span>
-        </span>
-      </div>
+      <Banner
+        username={$username}
+        pfp={$profilePicUrl}
+        color={$bannerColor}
+        tags={$activeTag ? [$activeTag] : []}
+        isYou={true}
+        isActive={isMyTurn}
+        size="sm"
+      />
 
       <div class="game-vs-col">
         <span class="game-vs-text">VS</span>
@@ -66,17 +110,15 @@
         <span class="game-progress-label">{$t('game.letters', { revealed: revealedCount, total: totalLetters })}</span>
       </div>
 
-      <div class="game-player {!isMyTurn ? 'game-player-active' : ''}">
-        <div class="game-player-avatar">
-          {#if oppPfp}
-            <img src={oppPfp} alt={oppName} />
-          {:else}
-            {oppName ? oppName.charAt(0).toUpperCase() : '?'}
-          {/if}
-          {#if !isMyTurn}<div class="turn-dot"></div>{/if}
-        </div>
-        <span class="game-player-name">{oppName ?? '…'}</span>
-      </div>
+      <Banner
+        username={oppName ?? '…'}
+        pfp={oppPfp}
+        color={oppBannerColor}
+        tags={oppTags}
+        isYou={false}
+        isActive={!isMyTurn}
+        size="sm"
+      />
 
     </div>
 
@@ -91,30 +133,39 @@
         </div>
       </div>
 
-      <div class="game-card">
-        <p class="game-card-label">{$t('game.activity')}</p>
-        <div class="log-box" bind:this={logEl}>
-          {#if $logMessages.length === 0}
-            <p class="log-empty">{$t('game.no_guesses')}</p>
-          {/if}
-          {#each $logMessages as msg}
-            <div class="log-line">{msg}</div>
-          {/each}
-        </div>
-      </div>
-
       <div class="game-card game-input-card">
         {#if isMyTurn}
           <p class="your-turn-label">{$t('game.your_turn')}</p>
-          <div class="chat-wrapper">
+          <!-- Word guess input -->
+          <div class="word-guess-row">
             <input
               type="text"
-              bind:value={$chatMessage}
-              placeholder={$t('game.placeholder')}
+              value={wordGuess}
+              placeholder={$t('game.word_placeholder')}
               maxlength="30"
-              on:keydown={(e) => e.key === 'Enter' && sendChat($chatMessage)}
+              readonly
+              on:focus={(e) => e.target.blur()}
             />
-            <button on:click={() => sendChat($chatMessage)}>{$t('game.guess_btn')}</button>
+            <button on:click={submitWord}>{$t('game.guess_btn')}</button>
+          </div>
+          <!-- On-screen keyboard -->
+          <div class="game-keyboard">
+            {#each KEYBOARD_ROWS as row}
+              <div class="keyboard-row">
+                {#each row as key}
+                  {#if key === '⌫'}
+                    <button class="key-btn key-backspace" on:click={() => tapKey(key)}>⌫</button>
+                  {:else}
+                    {@const state = keyState(key)}
+                    <button
+                      class="key-btn key-{state}"
+                      disabled={state === 'wrong'}
+                      on:click={() => tapKey(key)}
+                    >{key}</button>
+                  {/if}
+                {/each}
+              </div>
+            {/each}
           </div>
         {:else}
           <div class="waiting-turn">

@@ -5,6 +5,7 @@ using WordGuessingGame.API.Hubs;
 using WordGuessingGame.API.Models;
 using WordGuessingGame.Core.Models;
 using WordGuessingGame.Repository.Interfaces;
+using RewardType = WordGuessingGame.Core.Models.RewardType;
 
 namespace WordGuessingGame.API.Services
 {
@@ -18,6 +19,10 @@ namespace WordGuessingGame.API.Services
         private readonly Dictionary<string, User> _namedPlayers = new();
         private record PrivateLobbyEntry(User Creator, DateTime ExpiresAt);
         private readonly Dictionary<string, PrivateLobbyEntry> _privateLobbies = new();
+        private readonly Dictionary<string, CancellationTokenSource> _botTimers = new();
+
+        private const int BotMatchDelaySecs = 15;
+        private static readonly string[] BotNames = { "Bot 🤖", "HAL 🤖", "R2D2 🤖" };
 
         public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory)
         {
@@ -48,8 +53,16 @@ namespace WordGuessingGame.API.Services
 
             if (game == null)
             {
+                // No opponent yet — schedule a bot match after the delay
+                var cts = new CancellationTokenSource();
+                _botTimers[connectionId] = cts;
+                _ = ScheduleBotMatchAsync(player, cts.Token);
                 return;
             }
+
+            // Natural match found — cancel any bot timer for the opponent
+            CancelBotTimer(game.Player1!.ConnectionId);
+            CancelBotTimer(game.Player2!.ConnectionId);
 
             await _hub.Groups.AddToGroupAsync(game.Player1.ConnectionId, game.GameId.ToString());
             await _hub.Groups.AddToGroupAsync(game.Player2.ConnectionId, game.GameId.ToString());
@@ -75,6 +88,12 @@ namespace WordGuessingGame.API.Services
                 Player2 = game.Player2?.Username,
                 Player1Pfp = game.Player1?.ProfilePictureUrl,
                 Player2Pfp = game.Player2?.ProfilePictureUrl,
+                Player1BannerColor = game.Player1?.BannerColor ?? "#5b21b6",
+                Player2BannerColor = game.Player2?.BannerColor ?? "#5b21b6",
+                Player1ActiveTag = game.Player1?.ActiveTag,
+                Player2ActiveTag = game.Player2?.ActiveTag,
+                Player1Tags = game.Player1?.Tags ?? new List<string>(),
+                Player2Tags = game.Player2?.Tags ?? new List<string>(),
             });
 
             // 5-second countdown before starting
@@ -90,6 +109,10 @@ namespace WordGuessingGame.API.Services
                 Player2 = game.Player2?.Username,
                 Turn = game.Player1.Username,
             });
+
+            // If the bot goes first, kick off its turn
+            if (game.Player1?.IsBot == true)
+                _ = ScheduleBotTurnAsync(game);
         }
 
         private async Task FetchProfilePictures(GameState game)
@@ -100,13 +123,25 @@ namespace WordGuessingGame.API.Services
             if (game.Player1?.AppUserId.HasValue == true)
             {
                 var dbUser = await userRepo.GetByIdAsync(game.Player1.AppUserId.Value);
-                if (dbUser != null) game.Player1.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+                if (dbUser != null)
+                {
+                    game.Player1.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+                    game.Player1.BannerColor = dbUser.BannerColor;
+                    game.Player1.ActiveTag = dbUser.ActiveTag;
+                    game.Player1.Tags = dbUser.Tags.Select(t => t.Name).ToList();
+                }
             }
 
             if (game.Player2?.AppUserId.HasValue == true)
             {
                 var dbUser = await userRepo.GetByIdAsync(game.Player2.AppUserId.Value);
-                if (dbUser != null) game.Player2.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+                if (dbUser != null)
+                {
+                    game.Player2.ProfilePictureUrl = dbUser.ProfilePictureUrl;
+                    game.Player2.BannerColor = dbUser.BannerColor;
+                    game.Player2.ActiveTag = dbUser.ActiveTag;
+                    game.Player2.Tags = dbUser.Tags.Select(t => t.Name).ToList();
+                }
             }
         }
 
@@ -130,6 +165,9 @@ namespace WordGuessingGame.API.Services
         // 2 options: player disconnects during game, player disconnects while waiting
         public async Task DisconnectAsync(string connectionId)
         {
+            // Cancel any pending bot match timer
+            CancelBotTimer(connectionId);
+
             // Clean up any private lobby this player created
             var expiredCodes = _privateLobbies.Where(kv => kv.Value.Creator.ConnectionId == connectionId).Select(kv => kv.Key).ToList();
             foreach (var key in expiredCodes) _privateLobbies.Remove(key);
@@ -163,8 +201,8 @@ namespace WordGuessingGame.API.Services
             // Remove the game
             _lobby.EndGame(game.GameId);
 
-            // Only put opponent back in public queue for public games
-            if (!game.IsPrivate)
+            // Only put opponent back in public queue for public games (never re-queue bots)
+            if (!game.IsPrivate && !opponent.IsBot)
                 _lobby.JoinPlayer(opponent);
         }
 
@@ -274,6 +312,8 @@ namespace WordGuessingGame.API.Services
 
                 await repo.SaveChangesAsync();
             }
+
+            await EvaluateChallengesAsync(winner, opponent!);
         }
 
         private async Task PrepareForNextGuess(GameState game, string connectionId, List<int> guessedLetterAppearsOnIndexes, string guess, bool didAlreadyExist = false)
@@ -338,6 +378,11 @@ namespace WordGuessingGame.API.Services
                     Turn = opponent.Username,
                 });
             }
+
+            // If it's now the bot's turn, schedule an automatic guess
+            var botPlayer = game.Player1?.IsBot == true ? game.Player1 : (game.Player2?.IsBot == true ? game.Player2 : null);
+            if (botPlayer != null && game.CurrentTurnUsername == botPlayer.Username)
+                _ = ScheduleBotTurnAsync(game);
         }
 
         /// <summary>
@@ -377,6 +422,107 @@ namespace WordGuessingGame.API.Services
             }
 
             return indexes;
+        }
+
+        private async Task EvaluateChallengesAsync(User winner, User loser)
+        {
+            if (!winner.AppUserId.HasValue && !loser.AppUserId.HasValue) return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var challengeRepo = scope.ServiceProvider.GetRequiredService<IUserChallengeRepository>();
+
+            var challenges = await challengeRepo.GetAllChallengesAsync();
+
+            // Winner: increment WinCount + WinStreak progress
+            if (winner.AppUserId.HasValue)
+            {
+                foreach (var challenge in challenges)
+                {
+                    var uc = await challengeRepo.GetOrCreateAsync(winner.AppUserId.Value, challenge.Id);
+                    if (uc.IsCompleted) continue;
+
+                    uc.Progress++;
+
+                    if (uc.Progress >= challenge.TargetValue)
+                    {
+                        uc.IsCompleted = true;
+                        uc.CompletedAt = DateTime.UtcNow;
+                        // Reward is NOT applied here — user must click Claim
+                    }
+                }
+            }
+
+            // Loser: reset WinStreak progress
+            if (loser.AppUserId.HasValue)
+            {
+                foreach (var challenge in challenges.Where(c => c.Type == ChallengeType.WinStreak))
+                {
+                    var uc = await challengeRepo.GetOrCreateAsync(loser.AppUserId.Value, challenge.Id);
+                    if (!uc.IsCompleted)
+                        uc.Progress = 0;
+                }
+            }
+
+            await challengeRepo.SaveChangesAsync();
+        }
+
+        private void CancelBotTimer(string connectionId)
+        {
+            if (_botTimers.TryGetValue(connectionId, out var cts))
+            {
+                cts.Cancel();
+                _botTimers.Remove(connectionId);
+            }
+        }
+
+        private async Task ScheduleBotMatchAsync(User human, CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(BotMatchDelaySecs), ct);
+            }
+            catch (TaskCanceledException) { return; }
+
+            _botTimers.Remove(human.ConnectionId);
+
+            try
+            {
+                var botName = BotNames[new Random().Next(BotNames.Length)];
+                var bot = new User($"BOT_{Guid.NewGuid()}", botName) { IsBot = true };
+
+                var game = _lobby.StartBotGame(human, bot);
+                if (game == null) return; // human was already matched naturally
+
+                await _hub.Groups.AddToGroupAsync(human.ConnectionId, game.GameId.ToString());
+                await StartGame(game);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BOT] Error starting bot match: {ex.Message}");
+            }
+        }
+
+        private async Task ScheduleBotTurnAsync(GameState game)
+        {
+            var bot = game.Player1?.IsBot == true ? game.Player1 : game.Player2;
+            if (bot == null || game.CurrentTurnUsername != bot.Username) return;
+
+            // Random delay between 1.5 – 3.5 seconds to feel natural
+            var delay = new Random().Next(1500, 3500);
+            await Task.Delay(delay);
+
+            if (game.IsGuessed) return;
+
+            // Pick a random unguessed letter from the word
+            var unguessed = game.CurrentWord
+                .Where(c => !game.GuessedLetters.Contains(c))
+                .Distinct()
+                .ToList();
+
+            if (unguessed.Count == 0) return;
+
+            var guess = unguessed[new Random().Next(unguessed.Count)].ToString();
+            await GuessAsync(bot.ConnectionId, guess);
         }
 
         public string CreatePrivateLobby(string connectionId, string name, int? appUserId)
@@ -437,7 +583,7 @@ namespace WordGuessingGame.API.Services
             game.GuessedLetters.Clear();
             game.IsGuessed = false;
             game.TotalGuesses = 0;
-            game.CurrentTurnUsername = game.Player1?.ConnectionId ?? string.Empty;
+            game.CurrentTurnUsername = game.Player1?.Username ?? string.Empty;
         }
 
     }

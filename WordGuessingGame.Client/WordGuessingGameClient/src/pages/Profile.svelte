@@ -1,7 +1,8 @@
 <script>
-  import { page, username, profilePicUrl } from '../stores.js';
-  import { saveAvatar, saveLanguage } from '../api.js';
+  import { page, username, profilePicUrl, bannerColor, userTags, activeTag } from '../stores.js';
+  import { saveAvatar, saveLanguage, saveBannerColor, setActiveTag } from '../api.js';
   import { t, locale } from '../i18n.js';
+  import Banner from '../components/Banner.svelte';
 
   let avatarInput  = $profilePicUrl;
   let avatarSaved  = false;
@@ -10,6 +11,18 @@
   let selectedLocale  = $locale;
   let langSaved       = false;
   let langSaving      = false;
+
+  let selectedColor  = $bannerColor;
+  let colorSaved     = false;
+  let colorSaving    = false;
+
+  const PALETTE = [
+    '#5b21b6', '#7c3aed', '#6d28d9',
+    '#1d4ed8', '#0369a1', '#0891b2',
+    '#059669', '#16a34a', '#ca8a04',
+    '#ea580c', '#dc2626', '#be185d',
+    '#374151', '#111827',
+  ];
 
   async function doSaveAvatar() {
     avatarSaving = true;
@@ -30,6 +43,17 @@
       setTimeout(() => (langSaved = false), 2500);
     } catch { /* ignore */ } finally {
       langSaving = false;
+    }
+  }
+
+  async function doSaveBannerColor() {
+    colorSaving = true;
+    try {
+      await saveBannerColor(selectedColor);
+      colorSaved = true;
+      setTimeout(() => (colorSaved = false), 2500);
+    } catch { /* ignore */ } finally {
+      colorSaving = false;
     }
   }
 </script>
@@ -64,6 +88,74 @@
           </button>
         </div>
         {#if avatarSaved}<p class="success-text" style="font-size:0.85rem">{$t('profile.saved')}</p>{/if}
+      </div>
+    </div>
+
+    <!-- Banner color + Tags (merged) -->
+    <div class="profile-section" style="flex-direction:column;align-items:flex-start;gap:1.25rem">
+
+      <div style="display:flex;gap:2.5rem;align-items:flex-start;flex-wrap:wrap;width:100%">
+
+        <!-- Left: controls -->
+        <div style="display:flex;flex-direction:column;gap:1.1rem;flex:1;min-width:220px">
+
+          <!-- Color picker -->
+          <div>
+            <span class="input-label">{$t('profile.banner_label')}</span>
+            <p style="font-size:0.78rem;color:#9ca3af;margin:0.25rem 0 0.6rem">{$t('profile.banner_pick')}</p>
+            <div class="color-swatch-grid">
+              {#each PALETTE as color}
+                <button
+                  class="color-swatch {selectedColor === color ? 'swatch-active' : ''}"
+                  style="background:{color}"
+                  on:click={() => (selectedColor = color)}
+                  title={color}
+                ></button>
+              {/each}
+            </div>
+            <div style="margin-top:0.85rem;display:flex;align-items:center;gap:0.75rem">
+              <button class="btn-sm" style="width:auto" on:click={doSaveBannerColor} disabled={colorSaving}>
+                {colorSaving ? $t('profile.saving') : $t('profile.save')}
+              </button>
+              {#if colorSaved}<p class="success-text" style="font-size:0.85rem;margin:0">{$t('profile.banner_saved')}</p>{/if}
+            </div>
+          </div>
+
+          <!-- Tag picker -->
+          {#if $userTags.length > 0}
+            <div>
+              <span class="input-label">{$t('profile.tags_label')}</span>
+              <p style="font-size:0.78rem;color:#9ca3af;margin:0.25rem 0 0.6rem">{$t('profile.tags_hint')}</p>
+              <div class="profile-tag-list">
+                <button
+                  class="profile-tag-btn {$activeTag === null ? 'profile-tag-active' : ''}"
+                  on:click={() => setActiveTag(null)}
+                >{$t('profile.tag_none')}</button>
+                {#each $userTags as tag}
+                  <button
+                    class="profile-tag-btn {$activeTag === tag ? 'profile-tag-active' : ''}"
+                    on:click={() => setActiveTag(tag)}
+                  >{tag}</button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+        </div>
+
+        <!-- Right: preview -->
+        <div style="flex-shrink:0">
+          <p style="font-size:0.78rem;color:#9ca3af;margin:0 0 0.6rem">{$t('profile.banner_preview')}</p>
+          <Banner
+            username={$username}
+            pfp={$profilePicUrl}
+            color={selectedColor}
+            tags={$activeTag ? [$activeTag] : []}
+            isYou={true}
+            size="lg"
+          />
+        </div>
+
       </div>
     </div>
 

@@ -25,6 +25,9 @@ public class AuthService : IAuthService
     private static string MapLanguage(Core.Models.Language lang) =>
         lang == Core.Models.Language.English ? "en" : "nl";
 
+    private static List<string> MapTags(AppUser user) =>
+        user.Tags.Select(t => t.Name).ToList();
+
     public async Task<AuthResponse?> LoginAsync(LoginRequest request)
     {
         var user = await _userRepository.GetByUsernameAsync(request.Username);
@@ -39,7 +42,10 @@ public class AuthService : IAuthService
             Token = GenerateAccessToken(user, request.RememberMe),
             Username = user.Username,
             ProfilePictureUrl = user.ProfilePictureUrl,
-            Language = MapLanguage(user.Language)
+            Language = MapLanguage(user.Language),
+            BannerColor = user.BannerColor,
+            ActiveTag = user.ActiveTag,
+            Tags = MapTags(user)
         };
 
         if (request.RememberMe)
@@ -60,7 +66,8 @@ public class AuthService : IAuthService
         {
             Username = request.Username,
             Email = request.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            Tags = new List<UserTag> { new UserTag { Name = "OG" } }
         };
 
         await _userRepository.AddAsync(user);
@@ -71,7 +78,10 @@ public class AuthService : IAuthService
             Token = GenerateAccessToken(user, rememberMe: false),
             Username = user.Username,
             ProfilePictureUrl = user.ProfilePictureUrl,
-            Language = MapLanguage(user.Language)
+            Language = MapLanguage(user.Language),
+            BannerColor = user.BannerColor,
+            ActiveTag = user.ActiveTag,
+            Tags = MapTags(user)
         };
     }
 
@@ -92,7 +102,9 @@ public class AuthService : IAuthService
             Username = token.User.Username,
             RefreshToken = newRefreshToken,
             ProfilePictureUrl = token.User.ProfilePictureUrl,
-            Language = MapLanguage(token.User.Language)
+            Language = MapLanguage(token.User.Language),
+            BannerColor = token.User.BannerColor,
+            Tags = MapTags(token.User)
         };
     }
 
