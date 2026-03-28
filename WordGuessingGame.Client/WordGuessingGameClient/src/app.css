@@ -1334,6 +1334,19 @@ button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .rematch-info { color: #7c3aed; font-size: 1.1rem; font-weight: 500; margin: 0; }
 .voted-text   { color: #a855f7; font-size: 1rem; font-style: italic; margin: 0; }
 
+.leave-game-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.5rem;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+.leave-game-btn:hover { color: #6b7280; }
+
 .version-label {
   position: fixed;
   bottom: 12px;

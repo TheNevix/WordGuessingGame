@@ -145,6 +145,7 @@
 
   "game.badge": "🎮 In Game",
   "game.opponent_left": "Your opponent left the game.",
+  "game.leave_btn": "Back to dashboard",
   "game.you": "You",
   "game.letters": "{revealed}/{total} letters",
   "game.guess_word": "Guess the word",

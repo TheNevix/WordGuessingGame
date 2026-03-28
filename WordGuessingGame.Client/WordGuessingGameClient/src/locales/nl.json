@@ -145,6 +145,7 @@
 
   "game.badge": "🎮 In spel",
   "game.opponent_left": "Je tegenstander heeft het spel verlaten.",
+  "game.leave_btn": "Terug naar dashboard",
   "game.you": "Jij",
   "game.letters": "{revealed}/{total} letters",
   "game.guess_word": "Raad het woord",

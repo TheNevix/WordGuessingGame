@@ -57,6 +57,11 @@ namespace WordGuessingGame.API.Hubs
             await _gameService.RematchAsync(Context.ConnectionId);
         }
 
+        public async Task LeaveGame()
+        {
+            await _gameService.DisconnectAsync(Context.ConnectionId);
+        }
+
         public override Task OnDisconnectedAsync(Exception? exception)
         {
             _gameService.DisconnectAsync(Context.ConnectionId);

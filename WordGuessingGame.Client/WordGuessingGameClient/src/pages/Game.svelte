@@ -7,7 +7,7 @@
     winnerMessage, isWon, currentTurn,
     rematchCount, hasVotedRematch
   } from '../stores.js';
-  import { sendChat, sendRematch } from '../hub.js';
+  import { sendChat, sendRematch, leaveGame } from '../hub.js';
   import { t } from '../i18n.js';
   import Banner from '../components/Banner.svelte';
 
@@ -190,6 +190,7 @@
         {:else}
           <p class="voted-text">{$t('game.voted')}</p>
         {/if}
+        <button class="leave-game-btn" on:click={leaveGame}>{$t('game.leave_btn')}</button>
       </div>
     </main>
 

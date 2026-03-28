@@ -87,9 +87,7 @@ export function initHub() {
   conn.on("Rematch", () => { rematchCount.update(n => n + 1); });
 
   conn.on("Disconnected", () => {
-    gameStarted.set(false);
-    isWaiting.set(false);
-    matchData.set(null);
+    resetGameState();
     opponentLeft.set(true);
     page.set('dashboard');
   });
@@ -155,6 +153,25 @@ export async function cancelWaiting() {
   linkExpiresIn.set(0);
   if (linkCountdownInterval) { clearInterval(linkCountdownInterval); linkCountdownInterval = null; }
   page.set(get(isGuest) ? 'lobby' : 'dashboard');
+}
+
+function resetGameState() {
+  gameStarted.set(false);
+  isWaiting.set(false);
+  matchData.set(null);
+  isWon.set(false);
+  winnerMessage.set(null);
+  rematchCount.set(0);
+  hasVotedRematch.set(false);
+  logMessages.set([]);
+  letters.set([]);
+  currentTurn.set(null);
+}
+
+export function leaveGame() {
+  get(connection).invoke("LeaveGame");
+  resetGameState();
+  page.set('dashboard');
 }
 
 export function sendChat(msg) {
