@@ -171,7 +171,12 @@ function resetGameState() {
 export function leaveGame() {
   get(connection).invoke("LeaveGame");
   resetGameState();
-  page.set('dashboard');
+  if (get(isGuest)) {
+    isGuest.set(false);
+    page.set('login');
+  } else {
+    page.set('dashboard');
+  }
 }
 
 export function sendChat(msg) {
