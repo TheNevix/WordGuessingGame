@@ -46,6 +46,18 @@ export const matchData      = writable(null);
 export const matchCountdown = writable(0);
 export const isRematch      = writable(false);
 
+// ── Ranked ────────────────────────────────────────────────────
+export const isRankedGame      = writable(false);
+export const rankedSeriesScore = writable({ p1: 0, p2: 0 });
+export const rankedSeriesOver  = writable(null);   // null | { winner, p1RPChange, p2RPChange, ... }
+export const rankedRoundWinner = writable(null);   // username of who won the last round
+export const rankedStats       = writable(null);   // from API
+export const leaderboard       = writable([]);
+export const guessTimerActive  = writable(false);
+export const guessTimerSecs    = writable(30);
+export const rankTransition    = writable(null); // { oldTier, newTier, direction: 'up'|'down' } | null
+export const matchFoundToast   = writable(false);
+
 // ── Game ──────────────────────────────────────────────────────
 export const gameStarted     = writable(false);
 export const gameInformation = writable(null);

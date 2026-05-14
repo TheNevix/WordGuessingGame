@@ -1,11 +1,14 @@
 <script>
-  import { afterUpdate } from 'svelte';
+  import { afterUpdate, onDestroy } from 'svelte';
+  import confetti from 'canvas-confetti';
   import {
     username, profilePicUrl, bannerColor, activeTag,
     gameInformation, matchData,
     logMessages, letters, chatMessage,
     winnerMessage, isWon, currentTurn,
-    rematchCount, hasVotedRematch
+    rematchCount, hasVotedRematch,
+    isRankedGame, rankedSeriesScore, rankedSeriesOver, rankedRoundWinner,
+    guessTimerActive, guessTimerSecs, rankTransition
   } from '../stores.js';
   import { sendChat, sendRematch, leaveGame } from '../hub.js';
   import { t } from '../i18n.js';
@@ -39,6 +42,19 @@
   $: totalLetters  = $letters.length;
   $: progress      = totalLetters > 0 ? (revealedCount / totalLetters) * 100 : 0;
 
+  // Ranked: figure out my series score vs opponent series score
+  $: mySeriesWins  = $matchData?.player1 === $username ? $rankedSeriesScore.p1 : $rankedSeriesScore.p2;
+  $: oppSeriesWins = $matchData?.player1 === $username ? $rankedSeriesScore.p2 : $rankedSeriesScore.p1;
+
+  // Ranked series over
+  $: myRPChange  = $rankedSeriesOver
+    ? ($matchData?.player1 === $username ? $rankedSeriesOver.player1RPChange : $rankedSeriesOver.player2RPChange)
+    : 0;
+  $: myNewRP     = $rankedSeriesOver
+    ? ($matchData?.player1 === $username ? $rankedSeriesOver.player1NewRP : $rankedSeriesOver.player2NewRP)
+    : 0;
+  $: iSeriesWon  = $rankedSeriesOver?.winner === $username;
+
   // Keyboard
   const KEYBOARD_ROWS = [
     ['Q','W','E','R','T','Y','U','I','O','P'],
@@ -59,7 +75,6 @@
   function tapKey(key) {
     if (key === '⌫') { wordGuess = wordGuess.slice(0, -1); return; }
     if (!isMyTurn) return;
-    // Allow re-tapping revealed (correct) letters, block only wrong guesses
     if (guessedLetters.has(key) && !revealedLetters.has(key)) return;
     wordGuess += key;
   }
@@ -67,7 +82,6 @@
   function submitWord() {
     const w = wordGuess.trim().toLowerCase();
     if (!w || !isMyTurn) return;
-    console.log('submitWord called, sending:', w);
     sendChat(w);
     wordGuess = '';
   }
@@ -77,6 +91,39 @@
     if (guessedLetters.has(key)) return 'wrong';
     return 'normal';
   }
+
+  $: timerPct = ($guessTimerSecs / 30) * 100;
+  $: timerColor = $guessTimerSecs > 15 ? '#7c3aed' : $guessTimerSecs > 8 ? '#f59e0b' : '#ef4444';
+
+  // Rank transition screen: auto-dismiss after 3.5s
+  let showingRankTransition = false;
+  let rankTransitionTimeout = null;
+  $: if ($rankTransition) {
+    showingRankTransition = true;
+    if (rankTransitionTimeout) clearTimeout(rankTransitionTimeout);
+    rankTransitionTimeout = setTimeout(() => {
+      showingRankTransition = false;
+      rankTransition.set(null);
+      fireConfetti();
+    }, 3500);
+  }
+
+  // Confetti on series win (no rank transition path)
+  let confettiFired = false;
+  $: if (iSeriesWon && $rankedSeriesOver && !showingRankTransition && !confettiFired && !$rankTransition) {
+    confettiFired = true;
+    fireConfetti();
+  }
+  $: if (!$isRankedGame) confettiFired = false;
+
+  function fireConfetti() {
+    if (!iSeriesWon) return;
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ['#7c3aed','#a855f7','#fbbf24','#34d399'] });
+    setTimeout(() => confetti({ particleCount: 60, spread: 120, origin: { y: 0.4 }, angle: 60 }), 300);
+    setTimeout(() => confetti({ particleCount: 60, spread: 120, origin: { y: 0.4 }, angle: 120 }), 500);
+  }
+
+  onDestroy(() => { if (rankTransitionTimeout) clearTimeout(rankTransitionTimeout); });
 </script>
 
 <div class="game-layout">
@@ -84,7 +131,11 @@
   <nav class="navbar">
     <span class="navbar-brand">{$t('nav.brand')}</span>
     <div class="navbar-right">
-      <span class="game-nav-badge">{$t('game.badge')}</span>
+      {#if $isRankedGame}
+        <span class="game-nav-badge ranked-badge">⚔️ {$t('game.ranked_badge')}</span>
+      {:else}
+        <span class="game-nav-badge">{$t('game.badge')}</span>
+      {/if}
     </div>
   </nav>
 
@@ -103,22 +154,32 @@
       />
 
       <div class="game-vs-col">
-        <span class="game-vs-text">VS</span>
-        <div class="game-progress-track">
-          <div class="game-progress-fill" style="width:{progress}%"></div>
-        </div>
-        <span class="game-progress-label">{$t('game.letters', { revealed: revealedCount, total: totalLetters })}</span>
+        {#if $isRankedGame}
+          <span class="series-score">{mySeriesWins} — {oppSeriesWins}</span>
+          <span class="series-label">{$t('game.series_label')}</span>
+        {:else}
+          <span class="game-vs-text">VS</span>
+          <div class="game-progress-track">
+            <div class="game-progress-fill" style="width:{progress}%"></div>
+          </div>
+          <span class="game-progress-label">{$t('game.letters', { revealed: revealedCount, total: totalLetters })}</span>
+        {/if}
       </div>
 
-      <Banner
-        username={oppName ?? '…'}
-        pfp={oppPfp}
-        color={oppBannerColor}
-        tags={oppTags}
-        isYou={false}
-        isActive={!isMyTurn}
-        size="sm"
-      />
+      <div class="opponent-col">
+        <Banner
+          username={oppName ?? '…'}
+          pfp={oppPfp}
+          color={oppBannerColor}
+          tags={oppTags}
+          isYou={false}
+          isActive={!isMyTurn}
+          size="sm"
+        />
+        {#if !isMyTurn && !$isWon}
+          <div class="thinking-dots"><span></span><span></span><span></span></div>
+        {/if}
+      </div>
 
     </div>
 
@@ -135,8 +196,21 @@
 
       <div class="game-card game-input-card">
         {#if isMyTurn}
-          <p class="your-turn-label">{$t('game.your_turn')}</p>
-          <!-- Word guess input -->
+          <div class="your-turn-header">
+            <p class="your-turn-label">{$t('game.your_turn')}</p>
+            {#if $isRankedGame && $guessTimerActive}
+              <div class="guess-timer" style="--timer-color:{timerColor}">
+                <svg class="timer-ring" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" stroke-width="2.5"/>
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke={timerColor} stroke-width="2.5"
+                    stroke-dasharray="{timerPct} 100" stroke-linecap="round"
+                    transform="rotate(-90 18 18)"
+                  />
+                </svg>
+                <span class="timer-num">{$guessTimerSecs}</span>
+              </div>
+            {/if}
+          </div>
           <div class="word-guess-row">
             <input
               type="text"
@@ -148,7 +222,6 @@
             />
             <button on:click={submitWord}>{$t('game.guess_btn')}</button>
           </div>
-          <!-- On-screen keyboard -->
           <div class="game-keyboard">
             {#each KEYBOARD_ROWS as row}
               <div class="keyboard-row">
@@ -177,21 +250,81 @@
 
     </main>
 
+  {:else if $isRankedGame && !$rankedSeriesOver}
+
+    <!-- Between-round screen -->
+    <main class="game-main game-main-center">
+      <div class="round-over-card">
+        <div class="round-over-emoji">{$rankedRoundWinner === $username ? '🏆' : '💔'}</div>
+        <p class="round-over-title">
+          {$rankedRoundWinner === $username ? $t('game.round_won') : $t('game.round_lost')}
+        </p>
+        <p class="round-over-word">{$winnerMessage}</p>
+        <div class="round-series-score">
+          <span class="rss-num {mySeriesWins > oppSeriesWins ? 'rss-leading' : ''}">{mySeriesWins}</span>
+          <span class="rss-sep">—</span>
+          <span class="rss-num {oppSeriesWins > mySeriesWins ? 'rss-leading' : ''}">{oppSeriesWins}</span>
+        </div>
+        <p class="round-series-label">{$t('game.series_label')}</p>
+        <div class="next-round-bar">
+          <div class="next-round-fill"></div>
+        </div>
+        <p class="next-round-label">{$t('game.next_round')}</p>
+      </div>
+    </main>
+
   {:else}
 
     <main class="game-main game-main-center">
-      <div class="win-card">
-        <div class="win-trophy">🏆</div>
-        <p class="winner-text">{$winnerMessage}</p>
-        <div class="win-divider"></div>
-        <p class="rematch-info">{$t('game.rematch_votes', { count: $rematchCount })}</p>
-        {#if !$hasVotedRematch}
-          <button class="rematch-btn" on:click={sendRematch}>{$t('game.rematch_btn')}</button>
-        {:else}
-          <p class="voted-text">{$t('game.voted')}</p>
-        {/if}
-        <button class="leave-game-btn" on:click={leaveGame}>{$t('game.leave_btn')}</button>
-      </div>
+      {#if $isRankedGame && $rankedSeriesOver && showingRankTransition && $rankTransition}
+        <!-- Rank transition screen -->
+        <div class="rank-transition-card">
+          <p class="rank-transition-label">{$rankTransition.direction === 'up' ? $t('game.rank_up') : $t('game.rank_down')}</p>
+          <div class="rank-transition-tiers">
+            <div class="rank-tier-old">
+              <span class="rank-tier-icon">{$t(`ranked.tier_icon.${$rankTransition.oldTier.toLowerCase()}`)}</span>
+              <span class="rank-tier-name">{$t(`ranked.tier.${$rankTransition.oldTier.toLowerCase()}`)}</span>
+            </div>
+            <span class="rank-transition-arrow">{$rankTransition.direction === 'up' ? '→' : '→'}</span>
+            <div class="rank-tier-new {$rankTransition.direction === 'up' ? 'rank-tier-new-up' : 'rank-tier-new-down'}">
+              <span class="rank-tier-icon">{$t(`ranked.tier_icon.${$rankTransition.newTier.toLowerCase()}`)}</span>
+              <span class="rank-tier-name">{$t(`ranked.tier.${$rankTransition.newTier.toLowerCase()}`)}</span>
+            </div>
+          </div>
+        </div>
+      {:else if $isRankedGame && $rankedSeriesOver}
+        <!-- Ranked series end screen -->
+        <div class="win-card">
+          <div class="win-trophy">{iSeriesWon ? '🏆' : '💔'}</div>
+          <p class="winner-text">{iSeriesWon ? $t('game.ranked_win') : $t('game.ranked_loss')}</p>
+          <div class="ranked-series-final">
+            <span class="rsf-score">{$rankedSeriesOver.player1SeriesWins} — {$rankedSeriesOver.player2SeriesWins}</span>
+            {#if $rankedSeriesOver.wasForfeit}
+              <span class="rsf-forfeit">{$t('game.ranked_forfeit')}</span>
+            {/if}
+          </div>
+          <div class="win-divider"></div>
+          <div class="rp-change-row">
+            <span class="rp-change {myRPChange >= 0 ? 'rp-gain' : 'rp-loss'}">{myRPChange >= 0 ? '+' : ''}{myRPChange} RP</span>
+            <span class="rp-new">{$t('game.ranked_new_rp', { rp: myNewRP })}</span>
+          </div>
+          <button class="leave-game-btn" on:click={leaveGame}>{$t('game.leave_btn')}</button>
+        </div>
+      {:else}
+        <!-- Regular win screen -->
+        <div class="win-card">
+          <div class="win-trophy">🏆</div>
+          <p class="winner-text">{$winnerMessage}</p>
+          <div class="win-divider"></div>
+          <p class="rematch-info">{$t('game.rematch_votes', { count: $rematchCount })}</p>
+          {#if !$hasVotedRematch}
+            <button class="rematch-btn" on:click={sendRematch}>{$t('game.rematch_btn')}</button>
+          {:else}
+            <p class="voted-text">{$t('game.voted')}</p>
+          {/if}
+          <button class="leave-game-btn" on:click={leaveGame}>{$t('game.leave_btn')}</button>
+        </div>
+      {/if}
     </main>
 
   {/if}

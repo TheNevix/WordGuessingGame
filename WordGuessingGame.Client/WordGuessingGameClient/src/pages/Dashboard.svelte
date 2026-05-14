@@ -1,7 +1,8 @@
 <script>
   import { onMount } from 'svelte';
-  import { page, username, profilePicUrl, bannerColor, userTags, activeTag, opponentLeft } from '../stores.js';
-  import { handleLogout, fetchStats, fetchChallenges, claimChallenge, setActiveTag } from '../api.js';
+  import { page, username, profilePicUrl, bannerColor, userTags, activeTag, opponentLeft, rankedStats, leaderboard } from '../stores.js';
+  import { handleLogout, fetchStats, fetchChallenges, claimChallenge, setActiveTag, fetchRankedStats, fetchLeaderboard } from '../api.js';
+  import { connectToRanked } from '../hub.js';
   import { t } from '../i18n.js';
   import Banner from '../components/Banner.svelte';
 
@@ -19,6 +20,8 @@
   onMount(async () => {
     try { stats = await fetchStats(); } catch { /* keep defaults */ }
     try { challenges = await fetchChallenges(); } catch { /* keep defaults */ }
+    try { const rs = await fetchRankedStats(); if (rs) rankedStats.set(rs); } catch { /* ignore */ }
+    try { const lb = await fetchLeaderboard(); leaderboard.set(lb); } catch { /* ignore */ }
 
     if ($opponentLeft) {
       setTimeout(() => opponentLeft.set(false), 4000);
@@ -114,7 +117,11 @@
     <div class="hero-text">
       <h1 class="hero-title">{$t('dashboard.hello', { name: $username })}</h1>
       <p class="hero-subtitle">{$t('dashboard.subtitle')}</p>
-      <span class="rank-badge">{$t('dashboard.rank')}</span>
+      {#if $rankedStats}
+        <span class="rank-badge">{$t(`ranked.tier.${$rankedStats.tier.toLowerCase()}`)}</span>
+      {:else}
+        <span class="rank-badge">{$t('dashboard.rank')}</span>
+      {/if}
     </div>
     <div class="hero-stats">
       <div class="hero-stat">
@@ -154,6 +161,22 @@
         <p class="play-card-title">{$t('dashboard.quick_title')}</p>
         <p class="play-card-desc">{$t('dashboard.quick_desc')}</p>
         <button class="play-card-cta">{$t('dashboard.quick_btn')}</button>
+      </div>
+
+      <div class="play-card play-card-ranked" role="button" tabindex="0"
+        on:click={() => page.set('ranked')}
+        on:keydown={(e) => e.key === 'Enter' && page.set('ranked')}>
+        <div class="play-card-watermark">⚔️</div>
+        <div class="play-card-icon">⚔️</div>
+        <p class="play-card-title">{$t('dashboard.ranked_title')}</p>
+        <p class="play-card-desc">
+          {#if $rankedStats}
+            {$t('ranked.tier_label')}: <strong>{$t(`ranked.tier.${$rankedStats.tier.toLowerCase()}`)}</strong> · {$rankedStats.rp} RP
+          {:else}
+            {$t('dashboard.ranked_desc')}
+          {/if}
+        </p>
+        <button class="play-card-cta">{$t('dashboard.ranked_btn')}</button>
       </div>
 
       <div class="play-card play-card-secondary" role="button" tabindex="0"
@@ -201,31 +224,27 @@
       </div>
     {/if}
 
-    <p class="section-title">{$t('dashboard.section_soon')}</p>
-    <div class="feature-grid">
-
-      <div class="feature-card dimmed">
-        <span class="badge-soon">{$t('dashboard.soon_badge')}</span>
-        <div class="card-icon">🏆</div>
-        <p class="card-title">{$t('dashboard.leaderboard_title')}</p>
-        <p class="card-desc">{$t('dashboard.leaderboard_desc')}</p>
+    {#if $leaderboard.length > 0}
+      <p class="section-title">{$t('dashboard.leaderboard_title')}</p>
+      <div class="leaderboard-card">
+        <div class="leaderboard-season">{$rankedStats?.seasonName ?? 'Season 1'}</div>
+        {#each $leaderboard as entry}
+          <div class="lb-row {entry.username === $username ? 'lb-row-me' : ''}">
+            <span class="lb-rank">#{entry.rank}</span>
+            <div class="lb-avatar">
+              {#if entry.profilePictureUrl}
+                <img src={entry.profilePictureUrl} alt={entry.username} />
+              {:else}
+                {entry.username.charAt(0).toUpperCase()}
+              {/if}
+            </div>
+            <span class="lb-name">{entry.username}</span>
+            <span class="lb-tier">{$t(`ranked.tier_icon.${entry.tier.toLowerCase()}`)}</span>
+            <span class="lb-rp">{entry.rp} RP</span>
+          </div>
+        {/each}
       </div>
-
-      <div class="feature-card dimmed">
-        <span class="badge-soon">{$t('dashboard.soon_badge')}</span>
-        <div class="card-icon">📜</div>
-        <p class="card-title">{$t('dashboard.history_title')}</p>
-        <p class="card-desc">{$t('dashboard.history_desc')}</p>
-      </div>
-
-      <div class="feature-card dimmed">
-        <span class="badge-soon">{$t('dashboard.soon_badge')}</span>
-        <div class="card-icon">👥</div>
-        <p class="card-title">{$t('dashboard.friends_title')}</p>
-        <p class="card-desc">{$t('dashboard.friends_desc')}</p>
-      </div>
-
-    </div>
+    {/if}
   </main>
 
 </div>

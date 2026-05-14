@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WordGuessingGame.Core.Data;
 
@@ -11,9 +12,11 @@ using WordGuessingGame.Core.Data;
 namespace WordGuessingGame.Core.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260408104828_AddRankedSystem")]
+    partial class AddRankedSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -166,55 +169,6 @@ namespace WordGuessingGame.Core.Migrations
                     b.HasIndex("WinnerUserId");
 
                     b.ToTable("GameHistories", "wgg");
-                });
-
-            modelBuilder.Entity("WordGuessingGame.Core.Models.RankedMatchHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("MySeriesWins")
-                        .HasColumnType("int");
-
-                    b.Property<int>("NewRP")
-                        .HasColumnType("int");
-
-                    b.Property<string>("OpponentName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int>("OpponentSeriesWins")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("PlayedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("RPChange")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SeasonId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("WasForfeit")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("Won")
-                        .HasColumnType("bit");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SeasonId");
-
-                    b.HasIndex("UserId", "SeasonId");
-
-                    b.ToTable("RankedMatchHistories", "wgg");
                 });
 
             modelBuilder.Entity("WordGuessingGame.Core.Models.RefreshToken", b =>
@@ -392,25 +346,6 @@ namespace WordGuessingGame.Core.Migrations
                     b.Navigation("Opponent");
 
                     b.Navigation("Winner");
-                });
-
-            modelBuilder.Entity("WordGuessingGame.Core.Models.RankedMatchHistory", b =>
-                {
-                    b.HasOne("WordGuessingGame.Core.Models.Season", "Season")
-                        .WithMany()
-                        .HasForeignKey("SeasonId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("WordGuessingGame.Core.Models.AppUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Season");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("WordGuessingGame.Core.Models.RefreshToken", b =>

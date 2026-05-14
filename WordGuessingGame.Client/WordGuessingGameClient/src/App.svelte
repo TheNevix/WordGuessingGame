@@ -1,9 +1,10 @@
 <script>
   import { onMount } from "svelte";
-  import { page, isWaiting, gameStarted, matchData } from './stores.js';
+  import { page, isWaiting, gameStarted, matchData, matchFoundToast } from './stores.js';
   import { isTokenExpired } from './stores.js';
   import { tryRefreshToken } from './api.js';
   import { initHub } from './hub.js';
+  import { t } from './i18n.js';
 
   import Login       from './pages/Login.svelte';
   import Register    from './pages/Register.svelte';
@@ -15,8 +16,9 @@
   import Waiting     from './pages/Waiting.svelte';
   import Game        from './pages/Game.svelte';
   import Profile     from './pages/Profile.svelte';
+  import Ranked      from './pages/Ranked.svelte';
 
-  const version = "v1.4.0";
+  const version = "v1.5.0";
 
   onMount(async () => {
     const t = localStorage.getItem("token");
@@ -41,6 +43,8 @@
   <PrivateLobby />
 {:else if $page === 'join-private' && !$isWaiting && !$gameStarted}
   <JoinPrivate />
+{:else if $page === 'ranked' && !$gameStarted}
+  <Ranked />
 {:else if $page === 'countdown' && $matchData}
   <Countdown />
 {:else if $isWaiting && !$gameStarted}
@@ -50,3 +54,7 @@
 {/if}
 
 <div class="version-label">{version}</div>
+
+{#if $matchFoundToast}
+  <div class="match-found-toast">⚔️ {$t('ranked.opponent_found')}</div>
+{/if}

@@ -14,6 +14,11 @@ namespace WordGuessingGame.API.Models
         public List<bool> Rematch { get; set; } = new List<bool> { false, false };
         public int TotalGuesses { get; set; } = 0;
         public bool IsPrivate { get; set; } = false;
+        public bool IsRanked { get; set; } = false;
+        public int Player1SeriesWins { get; set; } = 0;
+        public int Player2SeriesWins { get; set; } = 0;
+        public bool SeriesComplete { get; set; } = false;
+        public CancellationTokenSource? GuessCts { get; set; }
 
         public GameState(Guid gameId, User opponent, User user)
         {

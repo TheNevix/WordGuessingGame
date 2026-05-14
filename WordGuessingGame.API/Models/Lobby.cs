@@ -71,6 +71,16 @@
             return game;
         }
 
+        public GameState StartRankedGame(User player1, User player2)
+        {
+            var gameId = Guid.NewGuid();
+            var game = new GameState(gameId, player1, player2) { IsRanked = true };
+            _playerToGame[player1.ConnectionId] = gameId;
+            _playerToGame[player2.ConnectionId] = gameId;
+            _games.Add(gameId, game);
+            return game;
+        }
+
         public GameState StartPrivateGame(Guid gameId, User player1, User player2)
         {
             var game = new GameState(gameId, player1, player2) { IsPrivate = true };

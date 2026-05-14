@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<UserTag> UserTags { get; set; }
     public DbSet<Challenge> Challenges { get; set; }
     public DbSet<UserChallenge> UserChallenges { get; set; }
+    public DbSet<Season> Seasons { get; set; }
+    public DbSet<UserRankedStats> UserRankedStats { get; set; }
+    public DbSet<RankedMatchHistory> RankedMatchHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -80,6 +83,45 @@ public class AppDbContext : DbContext
                 .HasForeignKey(u => u.ChallengeId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(u => new { u.UserId, u.ChallengeId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Season>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
+            entity.HasData(
+                new Season
+                {
+                    Id = 1,
+                    Name = "Season 1",
+                    StartDate = new DateTime(2026, 4, 8, 0, 0, 0, DateTimeKind.Utc),
+                    EndDate   = new DateTime(2026, 5, 8, 23, 59, 59, DateTimeKind.Utc)
+                }
+            );
+        });
+
+        modelBuilder.Entity<UserRankedStats>(entity =>
+        {
+            entity.HasKey(u => u.Id);
+            entity.HasOne(u => u.User)
+                .WithMany()
+                .HasForeignKey(u => u.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(u => u.Season)
+                .WithMany()
+                .HasForeignKey(u => u.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(u => new { u.UserId, u.SeasonId }).IsUnique();
+        });
+
+        modelBuilder.Entity<RankedMatchHistory>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            entity.ToTable("RankedMatchHistories", "wgg");
+            entity.Property(h => h.OpponentName).HasMaxLength(50).IsRequired();
+            entity.HasOne(h => h.User).WithMany().HasForeignKey(h => h.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(h => h.Season).WithMany().HasForeignKey(h => h.SeasonId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(h => new { h.UserId, h.SeasonId });
         });
 
         modelBuilder.Entity<GameHistory>(entity =>

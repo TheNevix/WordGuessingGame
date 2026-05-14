@@ -20,6 +20,7 @@ namespace WordGuessingGame.API.Services
         private record PrivateLobbyEntry(User Creator, DateTime ExpiresAt);
         private readonly Dictionary<string, PrivateLobbyEntry> _privateLobbies = new();
         private readonly Dictionary<string, CancellationTokenSource> _botTimers = new();
+        private readonly List<User> _rankedQueue = new();
 
         private const int BotMatchDelaySecs = 15;
         private static readonly string[] BotNames = { "Bot 🤖", "HAL 🤖", "R2D2 🤖" };
@@ -40,12 +41,16 @@ namespace WordGuessingGame.API.Services
 
         public async Task RegisterName(string connectionId, string name, int? appUserId)
         {
-            var player = _pendingPlayers[connectionId];
+            if (!_pendingPlayers.TryGetValue(connectionId, out var player) &&
+                !_namedPlayers.TryGetValue(connectionId, out player))
+            {
+                player = new User(connectionId);
+            }
+            _pendingPlayers.Remove(connectionId);
             player.Username = name;
             player.AppUserId = appUserId;
 
             // Move to named players
-            _pendingPlayers.Remove(connectionId);
             _namedPlayers[connectionId] = player;
 
             // Try to join a game
@@ -71,6 +76,59 @@ namespace WordGuessingGame.API.Services
 
         }
 
+        public async Task RegisterRanked(string connectionId, string name, int? appUserId)
+        {
+            // Player may be in _pendingPlayers (fresh connect), _namedPlayers (re-queue after game),
+            // or neither (re-queue after LeaveGame removed them) — handle all cases
+            if (!_pendingPlayers.TryGetValue(connectionId, out var player) &&
+                !_namedPlayers.TryGetValue(connectionId, out player))
+            {
+                player = new User(connectionId);
+            }
+            _pendingPlayers.Remove(connectionId);
+            player.Username = name;
+            player.AppUserId = appUserId;
+            _namedPlayers[connectionId] = player;
+
+            if (appUserId.HasValue)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var rankedRepo = scope.ServiceProvider.GetRequiredService<IRankedRepository>();
+                var season = await rankedRepo.GetCurrentSeasonAsync();
+                if (season != null)
+                {
+                    var stats = await rankedRepo.GetStatsByUserAsync(appUserId.Value, season.Id);
+                    player.RankedRP = stats?.RP ?? 0;
+                }
+            }
+
+            var opponent = _rankedQueue.FirstOrDefault(p => p.ConnectionId != connectionId);
+            if (opponent != null)
+            {
+                _rankedQueue.Remove(opponent);
+                CancelBotTimer(opponent.ConnectionId);
+                var game = _lobby.StartRankedGame(opponent, player);
+                await _hub.Groups.AddToGroupAsync(opponent.ConnectionId, game.GameId.ToString());
+                await _hub.Groups.AddToGroupAsync(player.ConnectionId, game.GameId.ToString());
+                await StartGame(game);
+            }
+            else
+            {
+                _rankedQueue.Add(player);
+                var cts = new CancellationTokenSource();
+                _botTimers[connectionId] = cts;
+                _ = ScheduleRankedBotMatchAsync(player, cts.Token);
+            }
+        }
+
+        public void CancelRanked(string connectionId)
+        {
+            CancelBotTimer(connectionId);
+            _rankedQueue.RemoveAll(p => p.ConnectionId == connectionId);
+            _namedPlayers.Remove(connectionId);
+            _pendingPlayers.Remove(connectionId);
+        }
+
         public User GetPlayer(string connectionId)
         {
             return _namedPlayers.TryGetValue(connectionId, out var p) ? p : null;
@@ -94,6 +152,9 @@ namespace WordGuessingGame.API.Services
                 Player2ActiveTag = game.Player2?.ActiveTag,
                 Player1Tags = game.Player1?.Tags ?? new List<string>(),
                 Player2Tags = game.Player2?.Tags ?? new List<string>(),
+                Player1RP = game.Player1?.RankedRP ?? 0,
+                Player2RP = game.Player2?.RankedRP ?? 0,
+                IsRanked = game.IsRanked,
             });
 
             // 5-second countdown before starting
@@ -108,11 +169,22 @@ namespace WordGuessingGame.API.Services
                 Player1 = game.Player1?.Username,
                 Player2 = game.Player2?.Username,
                 Turn = game.Player1.Username,
+                IsRanked = game.IsRanked,
+                Player1SeriesWins = game.Player1SeriesWins,
+                Player2SeriesWins = game.Player2SeriesWins,
             });
 
             // If the bot goes first, kick off its turn
             if (game.Player1?.IsBot == true)
                 _ = ScheduleBotTurnAsync(game);
+
+            // Start guess timer for ranked human turns
+            if (game.IsRanked && game.Player1?.IsBot == false)
+            {
+                var cts = new CancellationTokenSource();
+                game.GuessCts = cts;
+                _ = StartGuessTurnTimerAsync(game, game.Player1, cts.Token);
+            }
         }
 
         private async Task FetchProfilePictures(GameState game)
@@ -190,6 +262,7 @@ namespace WordGuessingGame.API.Services
                 _pendingPlayers.Remove(connectionId);
                 _namedPlayers.Remove(connectionId);
                 _lobby.DisconnectPlayer(connectionId);
+                _rankedQueue.RemoveAll(p => p.ConnectionId == connectionId);
                 return;
             }
 
@@ -198,8 +271,21 @@ namespace WordGuessingGame.API.Services
                 ? game.Player2
                 : game.Player1;
 
-            // Send disconnect to other player
-            await _hub.Clients.Client(opponent.ConnectionId).SendAsync("Disconnected");
+            // Handle ranked forfeit
+            if (game.IsRanked && !game.SeriesComplete)
+            {
+                var disconnectedPlayer = game.Player1?.ConnectionId == connectionId ? game.Player1 : game.Player2;
+                await EndRankedSeries(game, opponent, disconnectedPlayer!, forfeit: true);
+            }
+            else
+            {
+                // Send disconnect to other player
+                await _hub.Clients.Client(opponent.ConnectionId).SendAsync("Disconnected");
+
+                // Only put opponent back in public queue for public games (never re-queue bots, never re-queue ranked)
+                if (!game.IsPrivate && !opponent.IsBot && !game.IsRanked)
+                    _lobby.JoinPlayer(opponent);
+            }
 
             // Remove the named player
             _namedPlayers.Remove(connectionId);
@@ -210,15 +296,18 @@ namespace WordGuessingGame.API.Services
 
             // Remove the game
             _lobby.EndGame(game.GameId);
-
-            // Only put opponent back in public queue for public games (never re-queue bots)
-            if (!game.IsPrivate && !opponent.IsBot)
-                _lobby.JoinPlayer(opponent);
         }
 
         public async Task GuessAsync(string connectionId, string guess)
         {
             var game = _lobby.GetGameByPlayerId(connectionId);
+
+            // Cancel ranked guess timer on any guess
+            if (game.IsRanked)
+            {
+                game.GuessCts?.Cancel();
+                game.GuessCts = null;
+            }
 
             game.TotalGuesses++;
 
@@ -293,18 +382,47 @@ namespace WordGuessingGame.API.Services
         private async Task HandleWordGuessed(GameState game, string connectionId)
         {
             game.IsGuessed = true;
+            game.GuessCts?.Cancel();
+            game.GuessCts = null;
 
             var winner = game.Player1?.ConnectionId == connectionId ? game.Player1 : game.Player2;
-            var opponent = game.Player1?.ConnectionId == connectionId ? game.Player2 : game.Player1;
+            var loser  = game.Player1?.ConnectionId == connectionId ? game.Player2 : game.Player1;
+
+            if (game.IsRanked)
+            {
+                // Increment series wins
+                if (winner == game.Player1) game.Player1SeriesWins++;
+                else game.Player2SeriesWins++;
+
+                await _hub.Clients.Group(game.GameId.ToString()).SendAsync("WordGuessed", new
+                {
+                    Winner = winner!.Username,
+                    Word = game.CurrentWord,
+                    IsRanked = true,
+                    Player1SeriesWins = game.Player1SeriesWins,
+                    Player2SeriesWins = game.Player2SeriesWins,
+                });
+
+                if (game.Player1SeriesWins >= 3 || game.Player2SeriesWins >= 3)
+                {
+                    await EndRankedSeries(game, winner, loser!);
+                }
+                else
+                {
+                    _ = StartNextRankedRound(game);
+                }
+                return;
+            }
 
             await _hub.Clients.Group(game.GameId.ToString()).SendAsync("WordGuessed", new
             {
                 Winner = winner!.Username,
-                Word = game.CurrentWord
+                Word = game.CurrentWord,
+                IsRanked = false,
             });
 
             // Save history if at least one player is authenticated
-            if (winner.AppUserId.HasValue || opponent!.AppUserId.HasValue)
+            if (winner.AppUserId.HasValue || loser!.AppUserId.HasValue)
             {
                 using var scope = _scopeFactory.CreateScope();
                 var repo = scope.ServiceProvider.GetRequiredService<IGameHistoryRepository>();
@@ -314,8 +432,8 @@ namespace WordGuessingGame.API.Services
                     Word = game.CurrentWord,
                     WinnerUsername = winner.Username,
                     WinnerUserId = winner.AppUserId,
-                    OpponentUsername = opponent!.Username,
-                    OpponentUserId = opponent.AppUserId,
+                    OpponentUsername = loser!.Username,
+                    OpponentUserId = loser.AppUserId,
                     TotalGuesses = game.TotalGuesses,
                     PlayedAt = DateTime.UtcNow
                 });
@@ -323,7 +441,7 @@ namespace WordGuessingGame.API.Services
                 await repo.SaveChangesAsync();
             }
 
-            await EvaluateChallengesAsync(winner, opponent!);
+            await EvaluateChallengesAsync(winner, loser!);
         }
 
         private async Task PrepareForNextGuess(GameState game, string connectionId, List<int> guessedLetterAppearsOnIndexes, string guess, bool didAlreadyExist = false)
@@ -393,6 +511,18 @@ namespace WordGuessingGame.API.Services
             var botPlayer = game.Player1?.IsBot == true ? game.Player1 : (game.Player2?.IsBot == true ? game.Player2 : null);
             if (botPlayer != null && game.CurrentTurnUsername == botPlayer.Username)
                 _ = ScheduleBotTurnAsync(game);
+
+            // Start guess timer for ranked human turns
+            if (game.IsRanked)
+            {
+                var nextPlayer = game.CurrentTurnUsername == game.Player1?.Username ? game.Player1 : game.Player2;
+                if (nextPlayer?.IsBot == false)
+                {
+                    var cts = new CancellationTokenSource();
+                    game.GuessCts = cts;
+                    _ = StartGuessTurnTimerAsync(game, nextPlayer, cts.Token);
+                }
+            }
         }
 
         /// <summary>
@@ -517,31 +647,272 @@ namespace WordGuessingGame.API.Services
             var bot = game.Player1?.IsBot == true ? game.Player1 : game.Player2;
             if (bot == null || game.CurrentTurnUsername != bot.Username) return;
 
-            // Random delay between 1.5 – 3.5 seconds to feel natural
-            var delay = new Random().Next(1500, 3500);
+            var delay = bot.BotDifficulty switch
+            {
+                "hard"   => new Random().Next(500, 1500),
+                "medium" => new Random().Next(1000, 2500),
+                _        => new Random().Next(1500, 3500)
+            };
             await Task.Delay(delay);
 
-            if (game.IsGuessed) return;
+            if (game.IsGuessed || game.SeriesComplete) return;
 
-            // Pick a random unguessed letter from the word
-            var unguessed = game.CurrentWord
-                .Where(c => !game.GuessedLetters.Contains(c))
-                .Distinct()
-                .ToList();
+            // Hard bot: 15% chance to guess the full word
+            if (bot.BotDifficulty == "hard" && new Random().NextDouble() < 0.15)
+            {
+                await GuessAsync(bot.ConnectionId, game.CurrentWord);
+                return;
+            }
 
-            if (unguessed.Count == 0) return;
+            string guess;
+            if (bot.BotDifficulty == "easy")
+            {
+                var unguessed = game.CurrentWord
+                    .Where(c => !game.GuessedLetters.Contains(c))
+                    .Distinct().ToList();
+                if (unguessed.Count == 0) return;
+                guess = unguessed[new Random().Next(unguessed.Count)].ToString();
+            }
+            else
+            {
+                // Medium/Hard: use letter frequency order
+                const string freq = "ETAOINSHRDLCUMWFGYPBVKJXQZ";
+                var next = freq.FirstOrDefault(c => !game.GuessedLetters.Contains(c));
+                if (next == default) return;
+                guess = next.ToString();
+            }
 
-            var guess = unguessed[new Random().Next(unguessed.Count)].ToString();
             await GuessAsync(bot.ConnectionId, guess);
         }
 
+        private async Task ScheduleRankedBotMatchAsync(User human, CancellationToken ct)
+        {
+            try { await Task.Delay(TimeSpan.FromSeconds(BotMatchDelaySecs), ct); }
+            catch (TaskCanceledException) { return; }
+
+            _botTimers.Remove(human.ConnectionId);
+            _rankedQueue.RemoveAll(p => p.ConnectionId == human.ConnectionId);
+
+            try
+            {
+                var tier = GetTierFromRP(human.RankedRP);
+                var difficulty = tier switch
+                {
+                    RankedTier.Scribbler or RankedTier.Reader => "easy",
+                    RankedTier.Wordsmith => "medium",
+                    _ => "hard"
+                };
+                var botName = BotNames[new Random().Next(BotNames.Length)];
+                var bot = new User($"BOT_{Guid.NewGuid()}", botName) { IsBot = true, BotDifficulty = difficulty };
+
+                var game = _lobby.StartRankedGame(human, bot);
+                if (game == null) return;
+
+                await _hub.Groups.AddToGroupAsync(human.ConnectionId, game.GameId.ToString());
+                await StartGame(game);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[RANKED BOT] Error: {ex.Message}");
+            }
+        }
+
+        private async Task EndRankedSeries(GameState game, User winner, User loser, bool forfeit = false)
+        {
+            game.SeriesComplete = true;
+            game.GuessCts?.Cancel();
+            game.GuessCts = null;
+
+            bool vsBot = winner.IsBot || loser.IsBot;
+            bool humanWon = !winner.IsBot;
+
+            int player1RPChange = 0;
+            int player2RPChange = 0;
+
+            if (vsBot)
+            {
+                var humanPlayer = humanWon ? winner : loser;
+                var tier = GetTierFromRP(humanPlayer.RankedRP);
+                int loserSeriesWins = winner == game.Player1 ? game.Player2SeriesWins : game.Player1SeriesWins;
+                bool sweep = loserSeriesWins == 0;
+
+                int botWinRP = humanWon ? tier switch
+                {
+                    RankedTier.Scribbler or RankedTier.Reader => sweep ? 15 : 12,
+                    RankedTier.Wordsmith => sweep ? 8 : 6,
+                    _ => sweep ? 6 : 4
+                } : 0;
+
+                int humanLossRP = humanWon ? 0 : (forfeit ? -8 : -3);
+
+                player1RPChange = winner == game.Player1 ? botWinRP : humanLossRP;
+                player2RPChange = winner == game.Player1 ? humanLossRP : botWinRP;
+            }
+            else
+            {
+                int winnerSeriesWins = winner == game.Player1 ? game.Player1SeriesWins : game.Player2SeriesWins;
+                int loserSeriesWins  = winner == game.Player1 ? game.Player2SeriesWins : game.Player1SeriesWins;
+                int winRP  = loserSeriesWins == 0 ? 35 : 30;
+                int lossRP = forfeit ? -25 : -20;
+
+                player1RPChange = winner == game.Player1 ? winRP : lossRP;
+                player2RPChange = winner == game.Player1 ? lossRP : winRP;
+            }
+
+            int player1NewRP = game.Player1?.RankedRP ?? 0;
+            int player2NewRP = game.Player2?.RankedRP ?? 0;
+            string? player1OldTier = null, player1NewTier = null;
+            string? player2OldTier = null, player2NewTier = null;
+
+            using (var scope = _scopeFactory.CreateScope())
+            {
+                var rankedRepo = scope.ServiceProvider.GetRequiredService<IRankedRepository>();
+                var season = await rankedRepo.GetCurrentSeasonAsync();
+                if (season != null)
+                {
+                    if (game.Player1?.AppUserId.HasValue == true)
+                    {
+                        var stats = await rankedRepo.GetOrCreateStatsAsync(game.Player1.AppUserId.Value, season.Id);
+                        player1OldTier = stats.Tier.ToString();
+                        stats.RP = Math.Max(0, stats.RP + player1RPChange);
+                        stats.PeakRP = Math.Max(stats.PeakRP, stats.RP);
+                        if (winner == game.Player1) stats.Wins++; else stats.Losses++;
+                        player1NewRP = stats.RP;
+                        player1NewTier = stats.Tier.ToString();
+                        await rankedRepo.AddMatchHistoryAsync(new Core.Models.RankedMatchHistory
+                        {
+                            UserId = game.Player1.AppUserId.Value,
+                            SeasonId = season.Id,
+                            OpponentName = game.Player2?.Username ?? "Bot",
+                            Won = winner == game.Player1,
+                            RPChange = player1RPChange,
+                            NewRP = player1NewRP,
+                            MySeriesWins = game.Player1SeriesWins,
+                            OpponentSeriesWins = game.Player2SeriesWins,
+                            WasForfeit = forfeit
+                        });
+                    }
+                    if (game.Player2?.AppUserId.HasValue == true)
+                    {
+                        var stats = await rankedRepo.GetOrCreateStatsAsync(game.Player2.AppUserId.Value, season.Id);
+                        player2OldTier = stats.Tier.ToString();
+                        stats.RP = Math.Max(0, stats.RP + player2RPChange);
+                        stats.PeakRP = Math.Max(stats.PeakRP, stats.RP);
+                        if (winner == game.Player2) stats.Wins++; else stats.Losses++;
+                        player2NewRP = stats.RP;
+                        player2NewTier = stats.Tier.ToString();
+                        await rankedRepo.AddMatchHistoryAsync(new Core.Models.RankedMatchHistory
+                        {
+                            UserId = game.Player2.AppUserId.Value,
+                            SeasonId = season.Id,
+                            OpponentName = game.Player1?.Username ?? "Bot",
+                            Won = winner == game.Player2,
+                            RPChange = player2RPChange,
+                            NewRP = player2NewRP,
+                            MySeriesWins = game.Player2SeriesWins,
+                            OpponentSeriesWins = game.Player1SeriesWins,
+                            WasForfeit = forfeit
+                        });
+                    }
+                    await rankedRepo.SaveChangesAsync();
+                }
+            }
+
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("RankedSeriesOver", new
+            {
+                Winner = winner.Username,
+                Player1SeriesWins = game.Player1SeriesWins,
+                Player2SeriesWins = game.Player2SeriesWins,
+                Player1RPChange = player1RPChange,
+                Player2RPChange = player2RPChange,
+                Player1NewRP = player1NewRP,
+                Player2NewRP = player2NewRP,
+                Player1OldTier = player1OldTier,
+                Player1NewTier = player1NewTier,
+                Player2OldTier = player2OldTier,
+                Player2NewTier = player2NewTier,
+                WasForfeit = forfeit
+            });
+        }
+
+        private async Task StartNextRankedRound(GameState game)
+        {
+            await Task.Delay(4000);
+            if (game.SeriesComplete) return;
+
+            GenerateAndClearState(game);
+
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("RankedRoundStarted", new
+            {
+                CurrentWordLength = game.CurrentWord.Length,
+                Player1 = game.Player1?.Username,
+                Player2 = game.Player2?.Username,
+                Turn = game.Player1?.Username,
+                Player1SeriesWins = game.Player1SeriesWins,
+                Player2SeriesWins = game.Player2SeriesWins,
+            });
+
+            if (game.Player1?.IsBot == true)
+                _ = ScheduleBotTurnAsync(game);
+
+            if (game.IsRanked && game.Player1?.IsBot == false)
+            {
+                var cts = new CancellationTokenSource();
+                game.GuessCts = cts;
+                _ = StartGuessTurnTimerAsync(game, game.Player1, cts.Token);
+            }
+        }
+
+        private async Task StartGuessTurnTimerAsync(GameState game, User player, CancellationToken ct)
+        {
+            try { await Task.Delay(30000, ct); }
+            catch (TaskCanceledException) { return; }
+
+            if (game.IsGuessed || game.SeriesComplete) return;
+            if (game.CurrentTurnUsername != player.Username) return;
+
+            // Forfeit this turn — switch to opponent
+            game.CurrentTurnUsername = game.Player1?.Username == game.CurrentTurnUsername
+                ? game.Player2?.Username ?? string.Empty
+                : game.Player1?.Username ?? string.Empty;
+
+            await _hub.Clients.Group(game.GameId.ToString()).SendAsync("TurnTimedOut", new
+            {
+                TimedOutPlayer = player.Username,
+                NextTurn = game.CurrentTurnUsername
+            });
+
+            var nextPlayer = game.CurrentTurnUsername == game.Player1?.Username ? game.Player1 : game.Player2;
+            if (nextPlayer?.IsBot == true)
+                _ = ScheduleBotTurnAsync(game);
+            else if (nextPlayer != null)
+            {
+                var newCts = new CancellationTokenSource();
+                game.GuessCts = newCts;
+                _ = StartGuessTurnTimerAsync(game, nextPlayer, newCts.Token);
+            }
+        }
+
+        private static RankedTier GetTierFromRP(int rp) => rp switch
+        {
+            >= 800 => RankedTier.Oracle,
+            >= 525 => RankedTier.Sage,
+            >= 325 => RankedTier.Scholar,
+            >= 175 => RankedTier.Wordsmith,
+            >= 75  => RankedTier.Reader,
+            _      => RankedTier.Scribbler
+        };
+
         public string CreatePrivateLobby(string connectionId, string name, int? appUserId)
         {
-            var player = _pendingPlayers[connectionId];
+            if (!_pendingPlayers.TryGetValue(connectionId, out var player) &&
+                !_namedPlayers.TryGetValue(connectionId, out player))
+            {
+                player = new User(connectionId);
+            }
+            _pendingPlayers.Remove(connectionId);
             player.Username = name;
             player.AppUserId = appUserId;
-
-            _pendingPlayers.Remove(connectionId);
             _namedPlayers[connectionId] = player;
 
             var code = GeneratePrivateCode();
@@ -562,7 +933,12 @@ namespace WordGuessingGame.API.Services
 
             _privateLobbies.Remove(upperCode);
 
-            var joiner = _pendingPlayers[connectionId];
+            if (!_pendingPlayers.TryGetValue(connectionId, out var joiner) &&
+                !_namedPlayers.TryGetValue(connectionId, out joiner))
+            {
+                joiner = new User(connectionId);
+            }
+            _pendingPlayers.Remove(connectionId);
             joiner.Username = name;
             joiner.AppUserId = appUserId;
             _pendingPlayers.Remove(connectionId);
@@ -587,6 +963,8 @@ namespace WordGuessingGame.API.Services
 
         private void GenerateAndClearState(GameState game)
         {
+            game.GuessCts?.Cancel();
+            game.GuessCts = null;
             game.Rematch = new List<bool> { false, false };
             game.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
             Console.WriteLine($"[DEBUG] Word selected: {game.CurrentWord}");

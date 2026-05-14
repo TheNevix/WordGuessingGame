@@ -208,6 +208,32 @@ export async function setActiveTag(tagName) {
   }
 }
 
+export async function fetchRankedStats() {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  const res = await fetch(`${API_BASE}/api/ranked/stats`, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchRankedHistory() {
+  const token = localStorage.getItem("token");
+  if (!token) return [];
+  const res = await fetch(`${API_BASE}/api/ranked/history`, {
+    headers: { "Authorization": `Bearer ${token}` }
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchLeaderboard() {
+  const res = await fetch(`${API_BASE}/api/ranked/leaderboard`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 // Returns array of ChallengeProgressResponse or throws.
 export async function fetchChallenges() {
   const token = localStorage.getItem("token");

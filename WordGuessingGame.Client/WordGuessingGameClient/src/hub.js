@@ -7,7 +7,9 @@ import {
   chatMessage, winnerMessage, isWon, rematchCount,
   currentTurn, hasVotedRematch, opponentLeft,
   privateLobbyLink, privateLobbyError, linkExpiresIn,
-  inviteCode
+  inviteCode,
+  isRankedGame, rankedSeriesScore, rankedSeriesOver, rankedRoundWinner,
+  guessTimerActive, guessTimerSecs, rankTransition, matchFoundToast
 } from './stores.js';
 import { isTokenExpired, formatCountdown } from './stores.js';
 import { tryRefreshToken, API_BASE } from './api.js';
@@ -16,6 +18,7 @@ import { tr } from './i18n.js';
 let linkCountdownInterval  = null;
 let matchCountdownInterval = null;
 let matchFoundTimeout      = null;
+let guessTimerInterval     = null;
 
 export function initHub() {
   const conn = new signalR.HubConnectionBuilder()
@@ -43,7 +46,45 @@ export function initHub() {
     hasVotedRematch.set(false);
     gameInformation.set(gameInfo);
     currentTurn.set(gameInfo.turn);
+    isRankedGame.set(!!gameInfo.isRanked);
+    rankedSeriesScore.set({ p1: gameInfo.player1SeriesWins ?? 0, p2: gameInfo.player2SeriesWins ?? 0 });
+    rankedSeriesOver.set(null);
+    if (gameInfo.isRanked) startGuessTimer();
     page.set("game");
+  });
+
+  conn.on("RankedRoundStarted", (info) => {
+    letters.set(Array(info.currentWordLength).fill(""));
+    logMessages.set([]);
+    winnerMessage.set(null);
+    rankedRoundWinner.set(null);
+    isWon.set(false);
+    currentTurn.set(info.turn);
+    rankedSeriesScore.set({ p1: info.player1SeriesWins, p2: info.player2SeriesWins });
+    startGuessTimer();
+  });
+
+  conn.on("RankedSeriesOver", (info) => {
+    stopGuessTimer();
+    rankedSeriesOver.set(info);
+    isWon.set(true);
+    // Detect tier change
+    const me = get(username);
+    const md = get(matchData);
+    const isP1 = md?.player1 === me;
+    const oldTier = isP1 ? info.player1OldTier : info.player2OldTier;
+    const newTier = isP1 ? info.player1NewTier : info.player2NewTier;
+    if (oldTier && newTier && oldTier !== newTier) {
+      const order = ['scribbler','reader','wordsmith','scholar','sage','oracle'];
+      const direction = order.indexOf(newTier.toLowerCase()) > order.indexOf(oldTier.toLowerCase()) ? 'up' : 'down';
+      rankTransition.set({ oldTier, newTier, direction });
+    }
+  });
+
+  conn.on("TurnTimedOut", (info) => {
+    currentTurn.set(info.nextTurn);
+    stopGuessTimer();
+    if (info.nextTurn === get(username)) startGuessTimer();
   });
 
   conn.on("Guessed", (guessInfo) => {
@@ -60,11 +101,23 @@ export function initHub() {
       });
     }
     currentTurn.set(guessInfo.turn);
+    // Reset guess timer if ranked and now my turn
+    if (get(isRankedGame)) {
+      stopGuessTimer();
+      if (guessInfo.turn === get(username)) startGuessTimer();
+    }
   });
 
   conn.on("WordGuessed", (info) => {
+    stopGuessTimer();
     winnerMessage.set(tr('game.msg.word_correct', { winner: info.winner, word: info.word }));
-    isWon.set(true);
+    if (info.isRanked) {
+      rankedSeriesScore.set({ p1: info.player1SeriesWins, p2: info.player2SeriesWins });
+      rankedRoundWinner.set(info.winner);
+      isWon.set(true);
+    } else {
+      isWon.set(true);
+    }
   });
 
   conn.on("PrivateLobbyCreated", (code) => {
@@ -93,6 +146,8 @@ export function initHub() {
   });
 
   conn.on("MatchFound", (data) => {
+    matchFoundToast.set(true);
+    setTimeout(() => matchFoundToast.set(false), 2500);
     isRematch.set(get(gameStarted));
     matchData.set(data);
     matchCountdown.set(5);
@@ -156,6 +211,7 @@ export async function cancelWaiting() {
 }
 
 function resetGameState() {
+  stopGuessTimer();
   gameStarted.set(false);
   isWaiting.set(false);
   matchData.set(null);
@@ -166,6 +222,29 @@ function resetGameState() {
   logMessages.set([]);
   letters.set([]);
   currentTurn.set(null);
+  isRankedGame.set(false);
+  rankedSeriesScore.set({ p1: 0, p2: 0 });
+  rankedSeriesOver.set(null);
+  rankedRoundWinner.set(null);
+  rankTransition.set(null);
+}
+
+function startGuessTimer() {
+  stopGuessTimer();
+  guessTimerSecs.set(30);
+  guessTimerActive.set(true);
+  guessTimerInterval = setInterval(() => {
+    guessTimerSecs.update(s => {
+      if (s <= 1) { stopGuessTimer(); return 0; }
+      return s - 1;
+    });
+  }, 1000);
+}
+
+function stopGuessTimer() {
+  if (guessTimerInterval) { clearInterval(guessTimerInterval); guessTimerInterval = null; }
+  guessTimerActive.set(false);
+  guessTimerSecs.set(30);
 }
 
 export function leaveGame() {
@@ -188,4 +267,20 @@ export function sendChat(msg) {
 export function sendRematch() {
   get(connection).invoke("RematchVote");
   hasVotedRematch.set(true);
+}
+
+export async function connectToRanked(displayName) {
+  try {
+    const conn = get(connection);
+    if (conn.state === signalR.HubConnectionState.Disconnected) await conn.start();
+    conn.invoke("RegisterRanked", displayName);
+    isWaiting.set(true);
+  } catch (err) {
+    console.error("Ranked connection failed:", err);
+  }
+}
+
+export function cancelRanked() {
+  try { get(connection).invoke("CancelRanked"); } catch { /* ignore */ }
+  isWaiting.set(false);
 }
