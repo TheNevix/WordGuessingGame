@@ -1,13 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { page, username, profilePicUrl, bannerColor, userTags, activeTag, opponentLeft, rankedStats, leaderboard } from '../stores.js';
-  import { handleLogout, fetchStats, fetchChallenges, claimChallenge, setActiveTag, fetchRankedStats, fetchLeaderboard } from '../api.js';
+  import { handleLogout, fetchChallenges, claimChallenge, setActiveTag, fetchRankedStats, fetchLeaderboard } from '../api.js';
   import { connectToRanked } from '../hub.js';
   import { t } from '../i18n.js';
   import Banner from '../components/Banner.svelte';
 
   let dropdownOpen = false;
-  let stats = { gamesPlayed: 0, wins: 0, winRate: 0, streak: 0 };
   let challenges = [];
   let claiming = null;   // challengeId currently being claimed
   let claimModal = null; // { rewardType, rewardValue, previewTags }
@@ -18,7 +17,6 @@
   };
 
   onMount(async () => {
-    try { stats = await fetchStats(); } catch { /* keep defaults */ }
     try { challenges = await fetchChallenges(); } catch { /* keep defaults */ }
     try { const rs = await fetchRankedStats(); if (rs) rankedStats.set(rs); } catch { /* ignore */ }
     try { const lb = await fetchLeaderboard(); leaderboard.set(lb); } catch { /* ignore */ }
@@ -122,28 +120,6 @@
       {:else}
         <span class="rank-badge">{$t('dashboard.rank')}</span>
       {/if}
-    </div>
-    <div class="hero-stats">
-      <div class="hero-stat">
-        <span class="hero-stat-icon">🎮</span>
-        <span class="hero-stat-value">{stats.gamesPlayed}</span>
-        <span class="hero-stat-label">{$t('dashboard.stat_games')}</span>
-      </div>
-      <div class="hero-stat">
-        <span class="hero-stat-icon">🏆</span>
-        <span class="hero-stat-value">{stats.wins}</span>
-        <span class="hero-stat-label">{$t('dashboard.stat_wins')}</span>
-      </div>
-      <div class="hero-stat">
-        <span class="hero-stat-icon">📊</span>
-        <span class="hero-stat-value">{stats.winRate}%</span>
-        <span class="hero-stat-label">{$t('dashboard.stat_winrate')}</span>
-      </div>
-      <div class="hero-stat">
-        <span class="hero-stat-icon">🔥</span>
-        <span class="hero-stat-value">{stats.streak}</span>
-        <span class="hero-stat-label">{$t('dashboard.stat_streak')}</span>
-      </div>
     </div>
   </div>
 

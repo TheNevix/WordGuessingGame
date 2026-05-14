@@ -167,35 +167,4 @@ public class UserController : ControllerBase
         });
     }
 
-    [HttpGet("stats")]
-    public async Task<IActionResult> GetStats()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(userIdClaim, out var userId))
-            return Unauthorized();
-
-        var games = await _gameHistoryRepository.GetByUserIdAsync(userId);
-
-        var gamesPlayed = games.Count;
-        var wins = games.Count(g => g.WinnerUserId == userId);
-        var winRate = gamesPlayed > 0 ? Math.Round((double)wins / gamesPlayed * 100, 1) : 0;
-
-        // Streak: consecutive wins from most recent game
-        var streak = 0;
-        foreach (var game in games) // already ordered by PlayedAt desc
-        {
-            if (game.WinnerUserId == userId)
-                streak++;
-            else
-                break;
-        }
-
-        return Ok(new PlayerStatsResponse
-        {
-            GamesPlayed = gamesPlayed,
-            Wins = wins,
-            WinRate = winRate,
-            Streak = streak
-        });
-    }
 }

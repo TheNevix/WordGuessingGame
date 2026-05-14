@@ -163,17 +163,6 @@ export async function saveLanguage(langCode) {
   setLocale(langCode);
 }
 
-// Returns { gamesPlayed, wins, winRate, streak } or throws on failure.
-export async function fetchStats() {
-  const token = localStorage.getItem("token");
-  if (!token) throw new Error("Not authenticated.");
-  const res = await fetch(`${API_BASE}/api/user/stats`, {
-    headers: { "Authorization": `Bearer ${token}` }
-  });
-  if (!res.ok) throw new Error("Failed to fetch stats.");
-  return res.json();
-}
-
 // Throws on failure.
 export async function saveBannerColor(color) {
   const token = localStorage.getItem("token");
