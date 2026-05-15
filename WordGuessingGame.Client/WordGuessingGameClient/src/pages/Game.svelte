@@ -8,8 +8,15 @@
     winnerMessage, isWon, currentTurn,
     rematchCount, hasVotedRematch,
     isRankedGame, rankedSeriesScore, rankedSeriesOver, rankedRoundWinner,
-    guessTimerActive, guessTimerSecs, rankTransition
+    guessTimerActive, guessTimerSecs, rankTransition, gameMode
   } from '../stores.js';
+
+  const themes = {
+    ranked:  { bg: 'linear-gradient(160deg,#1a0535 0%,#2d0f5e 50%,#0d0820 100%)', accent: '#f59e0b', accentDim: 'rgba(245,158,11,0.15)', dark: true },
+    quick:   { bg: 'linear-gradient(160deg,#051628 0%,#0c2a4a 50%,#020d1a 100%)', accent: '#06b6d4', accentDim: 'rgba(6,182,212,0.15)',   dark: true },
+    private: { bg: 'linear-gradient(160deg,#0e0a30 0%,#1a1060 50%,#080520 100%)', accent: '#818cf8', accentDim: 'rgba(129,140,248,0.15)', dark: true },
+  };
+  $: theme = themes[$gameMode] ?? themes.quick;
   import { sendChat, sendRematch, leaveGame } from '../hub.js';
   import { t } from '../i18n.js';
   import Banner from '../components/Banner.svelte';
@@ -126,15 +133,15 @@
   onDestroy(() => { if (rankTransitionTimeout) clearTimeout(rankTransitionTimeout); });
 </script>
 
-<div class="game-layout">
+<div class="game-layout" style="background:{theme.bg}; --accent:{theme.accent}; --accent-dim:{theme.accentDim}">
 
-  <nav class="navbar">
-    <span class="navbar-brand">{$t('nav.brand')}</span>
+  <nav class="navbar game-navbar" style="border-bottom-color: var(--accent-dim)">
+    <span class="navbar-brand" style="color:rgba(255,255,255,0.9)">{$t('nav.brand')}</span>
     <div class="navbar-right">
       {#if $isRankedGame}
-        <span class="game-nav-badge ranked-badge">⚔️ {$t('game.ranked_badge')}</span>
+        <span class="game-nav-badge ranked-badge" style="color:var(--accent); border-color:var(--accent-dim)">⚔️ {$t('game.ranked_badge')}</span>
       {:else}
-        <span class="game-nav-badge">{$t('game.badge')}</span>
+        <span class="game-nav-badge" style="color:var(--accent); border-color:var(--accent-dim)">{$t('game.badge')}</span>
       {/if}
     </div>
   </nav>
@@ -155,14 +162,14 @@
 
       <div class="game-vs-col">
         {#if $isRankedGame}
-          <span class="series-score">{mySeriesWins} — {oppSeriesWins}</span>
-          <span class="series-label">{$t('game.series_label')}</span>
+          <span class="series-score" style="color:var(--accent)">{mySeriesWins} — {oppSeriesWins}</span>
+          <span class="series-label" style="color:rgba(255,255,255,0.4)">{$t('game.series_label')}</span>
         {:else}
-          <span class="game-vs-text">VS</span>
-          <div class="game-progress-track">
-            <div class="game-progress-fill" style="width:{progress}%"></div>
+          <span class="game-vs-text" style="color:var(--accent)">VS</span>
+          <div class="game-progress-track" style="background:rgba(255,255,255,0.1)">
+            <div class="game-progress-fill" style="width:{progress}%; background:var(--accent)"></div>
           </div>
-          <span class="game-progress-label">{$t('game.letters', { revealed: revealedCount, total: totalLetters })}</span>
+          <span class="game-progress-label" style="color:rgba(255,255,255,0.4)">{$t('game.letters', { revealed: revealedCount, total: totalLetters })}</span>
         {/if}
       </div>
 
@@ -185,19 +192,21 @@
 
     <main class="game-main">
 
-      <div class="game-card">
-        <p class="game-card-label">{$t('game.guess_word')}</p>
+      <div class="game-card" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08)">
+        <p class="game-card-label" style="color:rgba(255,255,255,0.5)">{$t('game.guess_word')}</p>
         <div class="word-container">
           {#each $letters as letter}
-            <div class="letter-box {letter ? 'letter-revealed' : ''}">{letter}</div>
+            <div class="letter-box {letter ? 'letter-revealed' : ''}"
+              style="{letter ? `background:var(--accent); color:#fff; border-color:var(--accent)` : 'background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.12); color:transparent'}"
+            >{letter}</div>
           {/each}
         </div>
       </div>
 
-      <div class="game-card game-input-card">
+      <div class="game-card game-input-card" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08)">
         {#if isMyTurn}
           <div class="your-turn-header">
-            <p class="your-turn-label">{$t('game.your_turn')}</p>
+            <p class="your-turn-label" style="color:var(--accent)">{$t('game.your_turn')}</p>
             {#if $isRankedGame && $guessTimerActive}
               <div class="guess-timer" style="--timer-color:{timerColor}">
                 <svg class="timer-ring" viewBox="0 0 36 36">
@@ -219,8 +228,9 @@
               maxlength="30"
               readonly
               on:focus={(e) => e.target.blur()}
+              style="background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.12); color:#f1f5f9"
             />
-            <button on:click={submitWord}>{$t('game.guess_btn')}</button>
+            <button on:click={submitWord} style="background:var(--accent); color:#06030f">{$t('game.guess_btn')}</button>
           </div>
           <div class="game-keyboard">
             {#each KEYBOARD_ROWS as row}
@@ -234,6 +244,7 @@
                       class="key-btn key-{state}"
                       disabled={state === 'wrong'}
                       on:click={() => tapKey(key)}
+                      style={state === 'correct' ? `background:var(--accent); color:#fff; border-color:var(--accent)` : ''}
                     >{key}</button>
                   {/if}
                 {/each}
@@ -241,7 +252,7 @@
             {/each}
           </div>
         {:else}
-          <div class="waiting-turn">
+          <div class="waiting-turn" style="color:rgba(255,255,255,0.5)">
             <span class="waiting-pulse">⏳</span>
             <span>{$t('game.waiting', { name: $currentTurn })}</span>
           </div>
@@ -298,7 +309,7 @@
           <div class="win-trophy">{iSeriesWon ? '🏆' : '💔'}</div>
           <p class="winner-text">{iSeriesWon ? $t('game.ranked_win') : $t('game.ranked_loss')}</p>
           <div class="ranked-series-final">
-            <span class="rsf-score">{$rankedSeriesOver.player1SeriesWins} — {$rankedSeriesOver.player2SeriesWins}</span>
+            <span class="rsf-score" style="color:var(--accent)">{$rankedSeriesOver.player1SeriesWins} — {$rankedSeriesOver.player2SeriesWins}</span>
             {#if $rankedSeriesOver.wasForfeit}
               <span class="rsf-forfeit">{$t('game.ranked_forfeit')}</span>
             {/if}

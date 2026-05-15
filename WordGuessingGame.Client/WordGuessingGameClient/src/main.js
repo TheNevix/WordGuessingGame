@@ -1,5 +1,8 @@
 import { mount } from 'svelte'
 import './app.css'
+import './play-screen.css'
+import './ranked-lobby.css'
+import './countdown.css'
 import App from './App.svelte'
 
 const app = mount(App, {

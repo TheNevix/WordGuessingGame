@@ -57,6 +57,7 @@ export const guessTimerActive  = writable(false);
 export const guessTimerSecs    = writable(30);
 export const rankTransition    = writable(null); // { oldTier, newTier, direction: 'up'|'down' } | null
 export const matchFoundToast   = writable(false);
+export const gameMode          = writable('quick'); // 'quick' | 'ranked' | 'private'
 
 // ── Game ──────────────────────────────────────────────────────
 export const gameStarted     = writable(false);

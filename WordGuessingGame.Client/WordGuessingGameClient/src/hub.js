@@ -9,7 +9,7 @@ import {
   privateLobbyLink, privateLobbyError, linkExpiresIn,
   inviteCode,
   isRankedGame, rankedSeriesScore, rankedSeriesOver, rankedRoundWinner,
-  guessTimerActive, guessTimerSecs, rankTransition, matchFoundToast
+  guessTimerActive, guessTimerSecs, rankTransition, matchFoundToast, gameMode
 } from './stores.js';
 import { isTokenExpired, formatCountdown } from './stores.js';
 import { tryRefreshToken, API_BASE } from './api.js';
@@ -186,10 +186,13 @@ export async function connectToHub(mode, inviteCodeVal, displayName) {
       await conn.start();
     }
     if (mode === 'create-private') {
+      gameMode.set('private');
       conn.invoke("CreatePrivateLobby", displayName);
     } else if (mode === 'join-private') {
+      gameMode.set('private');
       conn.invoke("JoinPrivateLobby", inviteCodeVal, displayName);
     } else {
+      gameMode.set('quick');
       conn.invoke("RegisterName", displayName);
     }
     isWaiting.set(true);
@@ -273,6 +276,7 @@ export async function connectToRanked(displayName) {
   try {
     const conn = get(connection);
     if (conn.state === signalR.HubConnectionState.Disconnected) await conn.start();
+    gameMode.set('ranked');
     conn.invoke("RegisterRanked", displayName);
     isWaiting.set(true);
   } catch (err) {
