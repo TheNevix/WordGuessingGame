@@ -21,7 +21,7 @@
   import Ranked       from './pages/Ranked.svelte';
   import BottomNav    from './components/BottomNav.svelte';
 
-  const version = "v1.5.0";
+  const version = "v1.5.1";
 
   const TAB_PAGES = ['dashboard', 'challenges', 'leaderboard', 'profile'];
 
