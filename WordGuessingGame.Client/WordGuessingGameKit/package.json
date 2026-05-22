@@ -19,9 +19,5 @@
     "@microsoft/signalr": "^8.0.0",
     "canvas-confetti": "^1.9.0"
   },
-  "type": "module",
-  "packageManager": "pnpm@11.1.2",
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  }
+  "type": "module"
 }
