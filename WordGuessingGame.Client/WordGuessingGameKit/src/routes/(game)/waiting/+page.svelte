@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { username, profilePicUrl, bannerColor, activeTag, privateLobbyLink, linkExpiresIn } from '$lib/stores.js';
+  import { username, profilePicUrl, bannerColor, activeTag, userTags, privateLobbyLink, linkExpiresIn } from '$lib/stores.js';
   import { cancelWaiting } from '$lib/hub.js';
   import { formatCountdown } from '$lib/stores.js';
   import { t } from '$lib/i18n.js';
@@ -32,7 +32,7 @@
         username={$username}
         pfp={$profilePicUrl}
         color={$bannerColor}
-        tags={$activeTag ? [$activeTag] : []}
+        tags={$activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []}
         isYou={true}
         size="md"
       />

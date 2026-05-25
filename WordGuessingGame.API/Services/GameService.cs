@@ -698,8 +698,8 @@ namespace WordGuessingGame.API.Services
                 var tier = GetTierFromRP(human.RankedRP);
                 var difficulty = tier switch
                 {
-                    RankedTier.Scribbler or RankedTier.Reader => "easy",
-                    RankedTier.Wordsmith => "medium",
+                    RankedTier.Brons or RankedTier.Zilver => "easy",
+                    RankedTier.Goud => "medium",
                     _ => "hard"
                 };
                 var botName = BotNames[new Random().Next(BotNames.Length)];
@@ -738,8 +738,8 @@ namespace WordGuessingGame.API.Services
 
                 int botWinRP = humanWon ? tier switch
                 {
-                    RankedTier.Scribbler or RankedTier.Reader => sweep ? 15 : 12,
-                    RankedTier.Wordsmith => sweep ? 8 : 6,
+                    RankedTier.Brons or RankedTier.Zilver => sweep ? 15 : 12,
+                    RankedTier.Goud => sweep ? 8 : 6,
                     _ => sweep ? 6 : 4
                 } : 0;
 
@@ -895,12 +895,12 @@ namespace WordGuessingGame.API.Services
 
         private static RankedTier GetTierFromRP(int rp) => rp switch
         {
-            >= 800 => RankedTier.Oracle,
-            >= 525 => RankedTier.Sage,
-            >= 325 => RankedTier.Scholar,
-            >= 175 => RankedTier.Wordsmith,
-            >= 75  => RankedTier.Reader,
-            _      => RankedTier.Scribbler
+            >= 800 => RankedTier.Kampioen,
+            >= 525 => RankedTier.Diamant,
+            >= 325 => RankedTier.Platina,
+            >= 175 => RankedTier.Goud,
+            >= 75  => RankedTier.Zilver,
+            _      => RankedTier.Brons
         };
 
         public string CreatePrivateLobby(string connectionId, string name, int? appUserId)

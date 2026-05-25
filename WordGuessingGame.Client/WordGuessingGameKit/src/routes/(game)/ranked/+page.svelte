@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { username, profilePicUrl, activeTag, isWaiting, rankedStats } from '$lib/stores.js';
+  import { username, profilePicUrl, activeTag, userTags, isWaiting, rankedStats } from '$lib/stores.js';
   import { connectToRanked, cancelRanked } from '$lib/hub.js';
   import { fetchRankedStats, fetchRankedHistory } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
@@ -117,7 +117,10 @@
           <div class="rk-identity-dot"></div>
         </div>
         <span class="rk-identity-name">{$username}</span>
-        {#if $activeTag}<span class="rk-identity-tag">{$activeTag}</span>{/if}
+        {#if $activeTag}
+          {@const tagObj = $userTags.find(t => t.name === $activeTag)}
+          <span class="rk-identity-tag" style={tagObj?.color ? `color:${tagObj.color};border-color:${tagObj.color}` : ''}>{$activeTag}</span>
+        {/if}
       </div>
 
       <!-- Stats strip -->

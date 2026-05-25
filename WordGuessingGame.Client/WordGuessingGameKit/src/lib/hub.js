@@ -81,7 +81,7 @@ export function initHub() {
     const oldTier = isP1 ? info.player1OldTier : info.player2OldTier;
     const newTier = isP1 ? info.player1NewTier : info.player2NewTier;
     if (oldTier && newTier && oldTier !== newTier) {
-      const order = ['scribbler','reader','wordsmith','scholar','sage','oracle'];
+      const order = ['brons','zilver','goud','platina','diamant','kampioen'];
       const direction = order.indexOf(newTier.toLowerCase()) > order.indexOf(oldTier.toLowerCase()) ? 'up' : 'down';
       rankTransition.set({ oldTier, newTier, direction });
     }

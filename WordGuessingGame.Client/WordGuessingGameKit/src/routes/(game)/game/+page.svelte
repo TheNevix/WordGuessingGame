@@ -2,7 +2,7 @@
   import { afterUpdate, onDestroy } from 'svelte';
   import confetti from 'canvas-confetti';
   import {
-    username, profilePicUrl, bannerColor, activeTag,
+    username, profilePicUrl, bannerColor, activeTag, userTags,
     gameInformation, matchData,
     logMessages, letters, chatMessage,
     winnerMessage, isWon, currentTurn,
@@ -155,7 +155,7 @@
         username={$username}
         pfp={$profilePicUrl}
         color={$bannerColor}
-        tags={$activeTag ? [$activeTag] : []}
+        tags={$activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []}
         isYou={true}
         isActive={isMyTurn}
         size="sm"

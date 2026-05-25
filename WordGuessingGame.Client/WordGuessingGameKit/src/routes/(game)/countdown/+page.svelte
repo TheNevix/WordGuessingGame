@@ -1,5 +1,5 @@
 <script>
-  import { username, matchData, matchCountdown, isRematch, activeTag, gameMode } from '$lib/stores.js';
+  import { username, matchData, matchCountdown, isRematch, activeTag, userTags, gameMode } from '$lib/stores.js';
   import { t } from '$lib/i18n.js';
   import Banner from '$lib/components/Banner.svelte';
 
@@ -36,7 +36,7 @@
         username={$matchData?.player1}
         pfp={$matchData?.player1Pfp}
         color={$matchData?.player1BannerColor ?? '#5b21b6'}
-        tags={$matchData?.player1 === $username ? ($activeTag ? [$activeTag] : []) : ($matchData?.player1ActiveTag ? [$matchData.player1ActiveTag] : [])}
+        tags={$matchData?.player1 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player1ActiveTag ? [$matchData.player1ActiveTag] : [])}
         isYou={$matchData?.player1 === $username}
         size="lg"
       />
@@ -64,7 +64,7 @@
         username={$matchData?.player2}
         pfp={$matchData?.player2Pfp}
         color={$matchData?.player2BannerColor ?? '#5b21b6'}
-        tags={$matchData?.player2 === $username ? ($activeTag ? [$activeTag] : []) : ($matchData?.player2ActiveTag ? [$matchData.player2ActiveTag] : [])}
+        tags={$matchData?.player2 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player2ActiveTag ? [$matchData.player2ActiveTag] : [])}
         isYou={$matchData?.player2 === $username}
         size="lg"
       />

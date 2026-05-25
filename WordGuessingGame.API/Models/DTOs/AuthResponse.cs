@@ -9,5 +9,5 @@ public class AuthResponse
     public string Language { get; set; } = "en";
     public string BannerColor { get; set; } = "#5b21b6";
     public string? ActiveTag { get; set; }
-    public List<string> Tags { get; set; } = new();
+    public List<TagDto> Tags { get; set; } = new();
 }

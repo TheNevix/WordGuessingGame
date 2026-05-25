@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { username, profilePicUrl, activeTag, rankedStats } from '$lib/stores.js';
+  import { username, profilePicUrl, activeTag, userTags, rankedStats } from '$lib/stores.js';
   import { fetchRankedStats } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
 
@@ -78,7 +78,10 @@
       </div>
       <div class="play-user-text">
         <span class="play-username">{$username}</span>
-        {#if $activeTag}<span class="play-tag-pill">{$activeTag}</span>{/if}
+        {#if $activeTag}
+          {@const tagObj = $userTags.find(t => t.name === $activeTag)}
+          <span class="play-tag-pill" style={tagObj?.color ? `color:${tagObj.color};border-color:${tagObj.color}` : ''}>{$activeTag}</span>
+        {/if}
       </div>
     </div>
     {#if $rankedStats}

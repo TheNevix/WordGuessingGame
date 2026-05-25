@@ -2,10 +2,10 @@ namespace WordGuessingGame.Core.Models;
 
 public enum RankedTier
 {
-    Scribbler = 0,
-    Reader    = 1,
-    Wordsmith = 2,
-    Scholar   = 3,
-    Sage      = 4,
-    Oracle    = 5
+    Brons     = 0,
+    Zilver    = 1,
+    Goud      = 2,
+    Platina   = 3,
+    Diamant   = 4,
+    Kampioen  = 5
 }

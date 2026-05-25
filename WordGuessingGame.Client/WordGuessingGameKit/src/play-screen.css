@@ -47,9 +47,10 @@
 .play-user-text { display: flex; flex-direction: column; gap: 2px; }
 .play-username { font-size: 0.9rem; font-weight: 700; color: #f1f5f9; }
 .play-tag-pill {
-  font-size: 0.65rem; font-weight: 600; color: #a78bfa;
-  background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.35);
+  font-size: 0.65rem; font-weight: 700; color: #1e1035;
+  background: rgba(255,255,255,0.88); border: 1px solid rgba(255,255,255,0.95);
   border-radius: 999px; padding: 1px 6px; align-self: flex-start;
+  text-transform: uppercase; letter-spacing: 0.05em;
 }
 .play-rank-pill {
   display: flex; align-items: center; gap: 5px;

@@ -51,93 +51,81 @@
   }
 </script>
 
-<div class="dashboard-layout">
+<div class="tab-screen">
 
-  <nav class="navbar">
-    <span class="navbar-brand">{$t('nav.brand')}</span>
-    <div class="navbar-right">
-      <button class="btn-navbar btn-sm" on:click={() => goto('/dashboard')}>{$t('profile.back')}</button>
-    </div>
-  </nav>
+  <div class="tab-header">
+    <h1 class="tab-header-title">{$t('profile.title')}</h1>
+    <button class="btn-navbar btn-sm" on:click={() => goto('/dashboard')}>{$t('profile.back')}</button>
+  </div>
 
-  <main class="dashboard-main">
-    <p class="section-title">{$t('profile.title')}</p>
+  <div class="tab-content">
 
     <!-- Avatar -->
-    <div class="profile-section">
-      <div class="profile-pfp-preview">
-        {#if $profilePicUrl}
-          <img src={$profilePicUrl} alt={$username} />
-        {:else}
-          {$username.charAt(0).toUpperCase()}
-        {/if}
-      </div>
-      <div class="profile-form">
-        <span class="input-label">{$t('profile.avatar_label')}</span>
-        <div class="profile-form-row">
-          <input type="url" bind:value={avatarInput} placeholder={$t('profile.avatar_placeholder')} />
-          <button on:click={doSaveAvatar} disabled={avatarSaving}>
-            {avatarSaving ? $t('profile.saving') : $t('profile.save')}
-          </button>
+    <div class="pcard">
+      <div class="pcard-row">
+        <div class="pfp-circle">
+          {#if $profilePicUrl}
+            <img src={$profilePicUrl} alt={$username} />
+          {:else}
+            {$username.charAt(0).toUpperCase()}
+          {/if}
         </div>
-        {#if avatarSaved}<p class="success-text" style="font-size:0.85rem">{$t('profile.saved')}</p>{/if}
+        <div class="pcard-fields">
+          <span class="plabel">{$t('profile.avatar_label')}</span>
+          <div class="pinput-row">
+            <input class="pinput" type="url" bind:value={avatarInput} placeholder={$t('profile.avatar_placeholder')} />
+            <button class="pbtn" on:click={doSaveAvatar} disabled={avatarSaving}>
+              {avatarSaving ? $t('profile.saving') : $t('profile.save')}
+            </button>
+          </div>
+          {#if avatarSaved}<p class="psuccess">{$t('profile.saved')}</p>{/if}
+        </div>
       </div>
     </div>
 
-    <!-- Banner color + Tags (merged) -->
-    <div class="profile-section" style="flex-direction:column;align-items:flex-start;gap:1.25rem">
+    <!-- Banner color + Tags -->
+    <div class="pcard">
+      <div class="pcard-two-col">
 
-      <div style="display:flex;gap:2.5rem;align-items:flex-start;flex-wrap:wrap;width:100%">
-
-        <!-- Left: controls -->
-        <div style="display:flex;flex-direction:column;gap:1.1rem;flex:1;min-width:220px">
-
-          <!-- Color picker -->
-          <div>
-            <span class="input-label">{$t('profile.banner_label')}</span>
-            <p style="font-size:0.78rem;color:#9ca3af;margin:0.25rem 0 0.6rem">{$t('profile.banner_pick')}</p>
-            <div class="color-swatch-grid">
-              {#each PALETTE as color}
-                <button
-                  class="color-swatch {selectedColor === color ? 'swatch-active' : ''}"
-                  style="background:{color}"
-                  on:click={() => pickColor(color)}
-                  title={color}
-                ></button>
-              {/each}
-            </div>
+        <div class="pcard-col">
+          <span class="plabel">{$t('profile.banner_label')}</span>
+          <p class="phint">{$t('profile.banner_pick')}</p>
+          <div class="color-swatch-grid">
+            {#each PALETTE as color}
+              <button
+                class="color-swatch {selectedColor === color ? 'swatch-active' : ''}"
+                style="background:{color}"
+                on:click={() => pickColor(color)}
+                title={color}
+              ></button>
+            {/each}
           </div>
 
-          <!-- Tag picker -->
           {#if $userTags.length > 0}
-            <div>
-              <span class="input-label">{$t('profile.tags_label')}</span>
-              <p style="font-size:0.78rem;color:#9ca3af;margin:0.25rem 0 0.6rem">{$t('profile.tags_hint')}</p>
-              <div class="profile-tag-list">
+            <span class="plabel" style="margin-top:1.25rem">{$t('profile.tags_label')}</span>
+            <p class="phint">{$t('profile.tags_hint')}</p>
+            <div class="profile-tag-list">
+              <button
+                class="ptag-btn {$activeTag === null ? 'ptag-active' : ''}"
+                on:click={() => setActiveTag(null)}
+              >{$t('profile.tag_none')}</button>
+              {#each $userTags as tag}
                 <button
-                  class="profile-tag-btn {$activeTag === null ? 'profile-tag-active' : ''}"
-                  on:click={() => setActiveTag(null)}
-                >{$t('profile.tag_none')}</button>
-                {#each $userTags as tag}
-                  <button
-                    class="profile-tag-btn {$activeTag === tag ? 'profile-tag-active' : ''}"
-                    on:click={() => setActiveTag(tag)}
-                  >{tag}</button>
-                {/each}
-              </div>
+                  class="ptag-btn {$activeTag === tag.name ? 'ptag-active' : ''}"
+                  on:click={() => setActiveTag(tag.name)}
+                >{tag.name}</button>
+              {/each}
             </div>
           {/if}
-
         </div>
 
-        <!-- Right: preview -->
-        <div style="flex-shrink:0">
-          <p style="font-size:0.78rem;color:#9ca3af;margin:0 0 0.6rem">{$t('profile.banner_preview')}</p>
+        <div class="pcard-preview">
+          <p class="phint">{$t('profile.banner_preview')}</p>
           <Banner
             username={$username}
             pfp={$profilePicUrl}
             color={selectedColor}
-            tags={$activeTag ? [$activeTag] : []}
+            tags={$activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []}
             isYou={true}
             size="lg"
           />
@@ -147,21 +135,189 @@
     </div>
 
     <!-- Language -->
-    <div class="profile-section">
-      <div class="profile-form" style="width:100%">
-        <span class="input-label">{$t('profile.language_label')}</span>
-        <div class="profile-form-row">
-          <select bind:value={selectedLocale}>
-            <option value="en">{$t('profile.language_en')}</option>
-            <option value="nl">{$t('profile.language_nl')}</option>
-          </select>
-          <button on:click={doSaveLanguage} disabled={langSaving}>
-            {langSaving ? $t('profile.language_saving') : $t('profile.save')}
-          </button>
-        </div>
-        {#if langSaved}<p class="success-text" style="font-size:0.85rem">{$t('profile.language_saved')}</p>{/if}
+    <div class="pcard">
+      <span class="plabel">{$t('profile.language_label')}</span>
+      <div class="pinput-row" style="margin-top:0.6rem">
+        <select class="pinput" bind:value={selectedLocale}>
+          <option value="en">{$t('profile.language_en')}</option>
+          <option value="nl">{$t('profile.language_nl')}</option>
+        </select>
+        <button class="pbtn" on:click={doSaveLanguage} disabled={langSaving}>
+          {langSaving ? $t('profile.language_saving') : $t('profile.save')}
+        </button>
       </div>
+      {#if langSaved}<p class="psuccess">{$t('profile.language_saved')}</p>{/if}
     </div>
 
-  </main>
+  </div>
 </div>
+
+<style>
+  .pcard {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 18px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .pcard-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  .pcard-fields {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .pcard-two-col {
+    display: flex;
+    gap: 2.5rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .pcard-col {
+    flex: 1;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pcard-preview {
+    flex-shrink: 0;
+  }
+
+  .pfp-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(124,58,237,0.3);
+    border: 2px solid rgba(167,139,250,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #e9d5ff;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .pfp-circle img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .plabel {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.45);
+    display: block;
+  }
+
+  .phint {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.3);
+    margin: 0.25rem 0 0.6rem;
+  }
+
+  .pinput-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .pinput {
+    flex: 1;
+    width: auto;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: #f1f5f9;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+  }
+
+  .pinput:focus {
+    border-color: rgba(167,139,250,0.6);
+  }
+
+  .pinput::placeholder {
+    color: rgba(255,255,255,0.25);
+  }
+
+  select.pinput option {
+    background: #1a0535;
+    color: #f1f5f9;
+  }
+
+  .pbtn {
+    width: auto;
+    padding: 0.75rem 1.25rem;
+    flex-shrink: 0;
+    background: #7c3aed;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .pbtn:hover   { background: #6d28d9; opacity: 1; }
+  .pbtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .psuccess {
+    color: #4ade80;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0.25rem 0 0;
+  }
+
+  .ptag-btn {
+    background: rgba(255,255,255,0.07);
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    width: auto;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .ptag-btn:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.2);
+    opacity: 1;
+  }
+
+  .ptag-btn.ptag-active {
+    background: #7c3aed;
+    color: white;
+    border-color: #7c3aed;
+  }
+
+  @media (max-width: 600px) {
+    .pcard-two-col { flex-direction: column; }
+    .pinput-row    { flex-direction: column; }
+    .pinput-row :global(.pinput),
+    .pinput-row .pbtn { width: 100%; }
+  }
+</style>

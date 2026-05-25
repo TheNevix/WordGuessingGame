@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { username, profilePicUrl, bannerColor, activeTag, userTags, rankedStats } from '$lib/stores.js';
   import { fetchChallenges, claimChallenge, setActiveTag, fetchRankedStats } from '$lib/api.js';
   import { t } from '$lib/i18n.js';
@@ -27,7 +28,9 @@
         userTags.set(result.tags);
         localStorage.setItem("userTags", JSON.stringify(result.tags));
       }
-      const previewTags = result.rewardType === 'Tag' ? [result.rewardValue] : ($activeTag ? [$activeTag] : []);
+      const previewTags = result.rewardType === 'Tag'
+        ? [result.tags?.find(t => t.name === result.rewardValue) ?? { name: result.rewardValue }]
+        : ($activeTag ? [get(userTags).find(t => t.name === $activeTag) ?? { name: $activeTag }] : []);
       claimModal = { rewardType: result.rewardType, rewardValue: result.rewardValue, previewTags };
     } catch { /* silent */ } finally {
       claiming = null;

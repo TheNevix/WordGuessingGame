@@ -25,8 +25,8 @@ public class AuthService : IAuthService
     private static string MapLanguage(Core.Models.Language lang) =>
         lang == Core.Models.Language.English ? "en" : "nl";
 
-    private static List<string> MapTags(AppUser user) =>
-        user.Tags.Select(t => t.Name).ToList();
+    private static List<TagDto> MapTags(AppUser user) =>
+        user.Tags.Select(t => new TagDto { Name = t.Name, Color = t.Color }).ToList();
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request)
     {

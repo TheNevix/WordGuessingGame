@@ -30,7 +30,7 @@ public class RankedController : ControllerBase
 
         var stats = await _rankedRepo.GetStatsByUserAsync(userId, season.Id);
         if (stats == null)
-            return Ok(new RankedStatsResponse { RP = 0, Tier = RankedTier.Scribbler.ToString(), SeasonName = season.Name });
+            return Ok(new RankedStatsResponse { RP = 0, Tier = RankedTier.Brons.ToString(), SeasonName = season.Name });
 
         return Ok(new RankedStatsResponse
         {

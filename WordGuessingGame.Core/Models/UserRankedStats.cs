@@ -15,11 +15,11 @@ public class UserRankedStats
 
     public RankedTier Tier => RP switch
     {
-        >= 800 => RankedTier.Oracle,
-        >= 525 => RankedTier.Sage,
-        >= 325 => RankedTier.Scholar,
-        >= 175 => RankedTier.Wordsmith,
-        >= 75  => RankedTier.Reader,
-        _      => RankedTier.Scribbler
+        >= 800 => RankedTier.Kampioen,
+        >= 525 => RankedTier.Diamant,
+        >= 325 => RankedTier.Platina,
+        >= 175 => RankedTier.Goud,
+        >= 75  => RankedTier.Zilver,
+        _      => RankedTier.Brons
     };
 }

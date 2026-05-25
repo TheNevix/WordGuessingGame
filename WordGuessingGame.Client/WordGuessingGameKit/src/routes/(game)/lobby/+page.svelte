@@ -97,7 +97,7 @@
         <div class="qm-found-banner-wrap">
           <Banner username={myName} pfp={$isGuest ? null : $profilePicUrl}
             color={$isGuest ? '#374151' : $bannerColor}
-            tags={$isGuest || !$activeTag ? [] : [$activeTag]} isYou={true} size="md" />
+            tags={$isGuest || !$activeTag ? [] : [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}]} isYou={true} size="md" />
         </div>
         <div class="qm-found-vs">⚡</div>
         <div class="qm-found-banner-wrap qm-found-banner-right">
@@ -141,7 +141,8 @@
         </div>
         <span class="qm-identity-name">{myName}</span>
         {#if !$isGuest && $activeTag}
-          <span class="qm-identity-tag">{$activeTag}</span>
+          {@const tagObj = $userTags.find(t => t.name === $activeTag)}
+          <span class="qm-identity-tag" style={tagObj?.color ? `color:${tagObj.color};border-color:${tagObj.color}` : ''}>{$activeTag}</span>
         {/if}
       </div>
 

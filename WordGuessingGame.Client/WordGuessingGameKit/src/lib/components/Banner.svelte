@@ -23,7 +23,9 @@
       {#if tags.length > 0}
         <div class="banner-tags">
           {#each tags as tag}
-            <span class="banner-tag">{tag}</span>
+            {@const tagName = typeof tag === 'string' ? tag : tag.name}
+            {@const tagColor = typeof tag === 'string' ? null : tag.color}
+            <span class="banner-tag" style={tagColor ? `border-color:${tagColor};color:${tagColor}` : ''}>{tagName}</span>
           {/each}
         </div>
       {/if}

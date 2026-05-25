@@ -162,7 +162,7 @@ public class UserController : ControllerBase
         {
             rewardType  = challenge.RewardType.ToString(),
             rewardValue = challenge.RewardValue,
-            tags        = user?.Tags.Select(t => t.Name).ToList(),
+            tags        = user?.Tags.Select(t => new { t.Name, t.Color }).ToList(),
             bannerColor = user?.BannerColor,
         });
     }

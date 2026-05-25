@@ -54,6 +54,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(t => t.Id);
             entity.Property(t => t.Name).HasMaxLength(50).IsRequired();
+            entity.Property(t => t.Color).HasMaxLength(20);
             entity.HasOne(t => t.User)
                 .WithMany(u => u.Tags)
                 .HasForeignKey(t => t.UserId)
