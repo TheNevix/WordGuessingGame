@@ -9,6 +9,7 @@
         public bool IsBot { get; set; } = false;
         public string BannerColor { get; set; } = "#5b21b6";
         public string? ActiveTag { get; set; }
+        public string? ActiveTagColor { get; set; }
         public List<string> Tags { get; set; } = new();
         public int RankedRP { get; set; } = 0;
         public string BotDifficulty { get; set; } = "easy";

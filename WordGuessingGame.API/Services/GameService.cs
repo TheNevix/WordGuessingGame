@@ -149,7 +149,9 @@ namespace WordGuessingGame.API.Services
                 Player1BannerColor = game.Player1?.BannerColor ?? "#5b21b6",
                 Player2BannerColor = game.Player2?.BannerColor ?? "#5b21b6",
                 Player1ActiveTag = game.Player1?.ActiveTag,
+                Player1ActiveTagColor = game.Player1?.ActiveTagColor,
                 Player2ActiveTag = game.Player2?.ActiveTag,
+                Player2ActiveTagColor = game.Player2?.ActiveTagColor,
                 Player1Tags = game.Player1?.Tags ?? new List<string>(),
                 Player2Tags = game.Player2?.Tags ?? new List<string>(),
                 Player1RP = game.Player1?.RankedRP ?? 0,
@@ -200,6 +202,7 @@ namespace WordGuessingGame.API.Services
                     game.Player1.ProfilePictureUrl = dbUser.ProfilePictureUrl;
                     game.Player1.BannerColor = dbUser.BannerColor;
                     game.Player1.ActiveTag = dbUser.ActiveTag;
+                    game.Player1.ActiveTagColor = dbUser.Tags.FirstOrDefault(t => t.Name == dbUser.ActiveTag)?.Color;
                     game.Player1.Tags = dbUser.Tags.Select(t => t.Name).ToList();
                 }
             }
@@ -212,6 +215,7 @@ namespace WordGuessingGame.API.Services
                     game.Player2.ProfilePictureUrl = dbUser.ProfilePictureUrl;
                     game.Player2.BannerColor = dbUser.BannerColor;
                     game.Player2.ActiveTag = dbUser.ActiveTag;
+                    game.Player2.ActiveTagColor = dbUser.Tags.FirstOrDefault(t => t.Name == dbUser.ActiveTag)?.Color;
                     game.Player2.Tags = dbUser.Tags.Select(t => t.Name).ToList();
                 }
             }

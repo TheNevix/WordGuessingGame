@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { username, profilePicUrl, bannerColor, activeTag, userTags, privateLobbyLink, linkExpiresIn } from '$lib/stores.js';
+  import { username, profilePicUrl, bannerColor, activeTag, userTags, privateLobbyLink, linkExpiresIn, isWaiting } from '$lib/stores.js';
   import { cancelWaiting } from '$lib/hub.js';
   import { formatCountdown } from '$lib/stores.js';
   import { t } from '$lib/i18n.js';
@@ -10,10 +10,11 @@
   let linkCopied = false;
 
   onMount(() => {
-    // Give the server a moment to respond with the lobby link before redirecting
+    // Redirect only if we're not actually in queue and no lobby link arrives.
+    // Use a longer window so slow connections aren't kicked prematurely.
     const timeout = setTimeout(() => {
-      if (!$privateLobbyLink) goto('/dashboard');
-    }, 3000);
+      if (!$isWaiting && !$privateLobbyLink) goto('/dashboard');
+    }, 8000);
     return () => clearTimeout(timeout);
   });
 

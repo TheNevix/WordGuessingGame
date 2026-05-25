@@ -45,8 +45,9 @@
   $: oppName        = $matchData ? ($matchData.player1 === $username ? $matchData.player2 : $matchData.player1) : null;
   $: oppPfp         = $matchData ? ($matchData.player1 === $username ? $matchData.player2Pfp : $matchData.player1Pfp) : null;
   $: oppBannerColor = $matchData ? ($matchData.player1 === $username ? $matchData.player2BannerColor : $matchData.player1BannerColor) ?? '#5b21b6' : '#5b21b6';
-  $: oppActiveTag   = $matchData ? ($matchData.player1 === $username ? $matchData.player2ActiveTag : $matchData.player1ActiveTag) : null;
-  $: oppTags        = oppActiveTag ? [oppActiveTag] : [];
+  $: oppActiveTag      = $matchData ? ($matchData.player1 === $username ? $matchData.player2ActiveTag : $matchData.player1ActiveTag) : null;
+  $: oppActiveTagColor = $matchData ? ($matchData.player1 === $username ? $matchData.player2ActiveTagColor : $matchData.player1ActiveTagColor) : null;
+  $: oppTags           = oppActiveTag ? [{name: oppActiveTag, color: oppActiveTagColor ?? null}] : [];
   $: myName         = $isGuest ? (guestName || 'Guest') : $username;
 
   function formatElapsed(secs) {

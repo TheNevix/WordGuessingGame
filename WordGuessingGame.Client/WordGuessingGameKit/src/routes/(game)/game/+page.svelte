@@ -41,10 +41,13 @@
     ? ($matchData.player1 === $username ? $matchData.player2BannerColor : $matchData.player1BannerColor) ?? '#5b21b6'
     : '#5b21b6';
 
-  $: oppActiveTag = $matchData
+  $: oppActiveTag      = $matchData
     ? ($matchData.player1 === $username ? $matchData.player2ActiveTag : $matchData.player1ActiveTag)
     : null;
-  $: oppTags = oppActiveTag ? [oppActiveTag] : [];
+  $: oppActiveTagColor = $matchData
+    ? ($matchData.player1 === $username ? $matchData.player2ActiveTagColor : $matchData.player1ActiveTagColor)
+    : null;
+  $: oppTags = oppActiveTag ? [{name: oppActiveTag, color: oppActiveTagColor ?? null}] : [];
 
   $: revealedCount = $letters.filter(l => l !== '').length;
   $: totalLetters  = $letters.length;

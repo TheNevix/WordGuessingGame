@@ -36,7 +36,7 @@
         username={$matchData?.player1}
         pfp={$matchData?.player1Pfp}
         color={$matchData?.player1BannerColor ?? '#5b21b6'}
-        tags={$matchData?.player1 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player1ActiveTag ? [$matchData.player1ActiveTag] : [])}
+        tags={$matchData?.player1 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player1ActiveTag ? [{name: $matchData.player1ActiveTag, color: $matchData.player1ActiveTagColor ?? null}] : [])}
         isYou={$matchData?.player1 === $username}
         size="lg"
       />
@@ -64,7 +64,7 @@
         username={$matchData?.player2}
         pfp={$matchData?.player2Pfp}
         color={$matchData?.player2BannerColor ?? '#5b21b6'}
-        tags={$matchData?.player2 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player2ActiveTag ? [$matchData.player2ActiveTag] : [])}
+        tags={$matchData?.player2 === $username ? ($activeTag ? [$userTags.find(t => t.name === $activeTag) ?? {name: $activeTag}] : []) : ($matchData?.player2ActiveTag ? [{name: $matchData.player2ActiveTag, color: $matchData.player2ActiveTagColor ?? null}] : [])}
         isYou={$matchData?.player2 === $username}
         size="lg"
       />
