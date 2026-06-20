@@ -18,4 +18,11 @@
     <ProjectReference Include="..\WordGuessingGame.Repository\WordGuessingGame.Repository.csproj" />
   </ItemGroup>
 
+  <!-- Ship runtime assets (email templates + word list) with the published output so they
+       exist next to the app on the server, not just in the dev working directory. -->
+  <ItemGroup>
+    <Content Include="Email\**\*.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="words.txt" Condition="Exists('words.txt')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

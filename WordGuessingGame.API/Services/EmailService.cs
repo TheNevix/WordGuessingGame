@@ -53,7 +53,10 @@ public class EmailService : IEmailService
     }
 
     private static async Task<string> LoadTemplate(string path) =>
-        await File.ReadAllTextAsync(path);
+        // Resolve relative to the app's base directory (where the published templates live),
+        // not the process working directory — otherwise this throws on the server and the
+        // caller's catch silently drops the email.
+        await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, path));
 
     private async Task SendAsync(string toEmail, string subject, string html)
     {
@@ -73,11 +76,24 @@ public class EmailService : IEmailService
             Headers = { Authorization = new AuthenticationHeaderValue("Bearer", _apiKey) }
         };
 
-        var response = await client.SendAsync(request);
-        if (!response.IsSuccessStatusCode)
+        if (string.IsNullOrWhiteSpace(_apiKey))
+            _logger.LogError("Resend:ApiKey is empty on this server — email to {To} cannot be sent. Check appsettings on the deployed host.", toEmail);
+
+        try
         {
+            var response = await client.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
-            _logger.LogError("Resend {Status}: {Body}", (int)response.StatusCode, body);
+            if (response.IsSuccessStatusCode)
+                _logger.LogInformation("Resend accepted email to {To} ({Subject}). {Body}", toEmail, subject, body);
+            else
+                _logger.LogError("Resend rejected email to {To} ({Subject}) with {Status}: {Body}", toEmail, subject, (int)response.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            // Reached when the request never gets an HTTP response (DNS/TLS failure or the host
+            // blocks outbound HTTPS to api.resend.com). Previously this threw silently up the stack.
+            _logger.LogError(ex, "Resend request to api.resend.com FAILED for {To} ({Subject}) — likely blocked outbound connection on this host.", toEmail, subject);
+            throw;
         }
     }
 }
