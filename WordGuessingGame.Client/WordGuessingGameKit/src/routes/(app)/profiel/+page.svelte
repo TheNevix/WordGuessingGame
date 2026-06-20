@@ -55,7 +55,7 @@
 
   <div class="tab-header">
     <h1 class="tab-header-title">{$t('profile.title')}</h1>
-    <button class="btn-navbar btn-sm" on:click={() => goto('/dashboard')}>{$t('profile.back')}</button>
+    <button class="btn-navbar btn-sm" on:click={() => goto('/home')}>{$t('profile.back')}</button>
   </div>
 
   <div class="tab-content">

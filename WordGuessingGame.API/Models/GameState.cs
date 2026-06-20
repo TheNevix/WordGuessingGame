@@ -19,6 +19,9 @@ namespace WordGuessingGame.API.Models
         public int Player2SeriesWins { get; set; } = 0;
         public bool SeriesComplete { get; set; } = false;
         public CancellationTokenSource? GuessCts { get; set; }
+        // UTC time at which the current ranked turn timer expires — used to restore the
+        // countdown with the correct remaining seconds when a player reconnects.
+        public DateTime? GuessTurnEndsAt { get; set; }
 
         public GameState(Guid gameId, User opponent, User user)
         {

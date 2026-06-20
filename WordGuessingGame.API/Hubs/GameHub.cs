@@ -21,10 +21,17 @@ namespace WordGuessingGame.API.Hubs
             return int.TryParse(claim, out var id) ? id : null;
         }
 
-        public override Task OnConnectedAsync()
+        public override async Task OnConnectedAsync()
         {
-            _gameService.AddPendingConnection(Context.ConnectionId);
-            return base.OnConnectedAsync();
+            var appUserId = GetAuthUserId();
+            Console.WriteLine($"[CONNECTED] connId={Context.ConnectionId} appUserId={appUserId?.ToString() ?? "null"}");
+            if (appUserId.HasValue && await _gameService.TryAutoReconnectAsync(Context.ConnectionId, appUserId.Value))
+            {
+                await base.OnConnectedAsync();
+                return;
+            }
+            await _gameService.AddPendingConnection(Context.ConnectionId);
+            await base.OnConnectedAsync();
         }
 
         public async Task RegisterName(string name)
@@ -68,6 +75,12 @@ namespace WordGuessingGame.API.Hubs
             await _gameService.RematchAsync(Context.ConnectionId);
         }
 
+        // Fallback for guest players without a JWT
+        public async Task Reconnect(string name)
+        {
+            await _gameService.ReconnectAsync(Context.ConnectionId, name);
+        }
+
         public async Task LeaveGame()
         {
             await _gameService.DisconnectAsync(Context.ConnectionId);
@@ -75,7 +88,7 @@ namespace WordGuessingGame.API.Hubs
 
         public override Task OnDisconnectedAsync(Exception? exception)
         {
-            _gameService.DisconnectAsync(Context.ConnectionId);
+            _gameService.HandleConnectionDroppedAsync(Context.ConnectionId);
             return base.OnDisconnectedAsync(exception);
         }
     }

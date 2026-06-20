@@ -1,9 +1,11 @@
 <script>
-  import { afterUpdate, onDestroy } from 'svelte';
+  import { afterUpdate, onDestroy, onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { goto } from '$app/navigation';
   import confetti from 'canvas-confetti';
   import {
     username, profilePicUrl, bannerColor, activeTag, userTags,
-    gameInformation, matchData,
+    isReconnecting, gameInformation, matchData,
     logMessages, letters, chatMessage,
     winnerMessage, isWon, currentTurn,
     rematchCount, hasVotedRematch,
@@ -11,7 +13,7 @@
     guessTimerActive, guessTimerSecs, rankTransition, gameMode
   } from '$lib/stores.js';
 
-  import { sendChat, sendRematch, leaveGame } from '$lib/hub.js';
+  import { sendChat, sendRematch, leaveGame, reconnectToHub } from '$lib/hub.js';
   import { t } from '$lib/i18n.js';
   import Banner from '$lib/components/Banner.svelte';
 
@@ -134,8 +136,43 @@
     setTimeout(() => confetti({ particleCount: 60, spread: 120, origin: { y: 0.4 }, angle: 120 }), 500);
   }
 
+  onMount(async () => {
+    if (!get(gameInformation)) {
+      // Instantly restore UI from sessionStorage while SignalR reconnects
+      const saved = sessionStorage.getItem('activeGame');
+      if (saved) {
+        try {
+          const { gameInfo, matchDataSnap } = JSON.parse(saved);
+          gameInformation.set(gameInfo);
+          if (matchDataSnap) matchData.set(matchDataSnap);
+          letters.set(Array(gameInfo.currentWordLength).fill(''));
+          isRankedGame.set(!!gameInfo.isRanked);
+          gameMode.set(gameInfo.isRanked ? 'ranked' : 'quick');
+        } catch { /* ignore bad data */ }
+      }
+
+      isReconnecting.set(true);
+      await reconnectToHub(get(username));
+      // Fallback: if no server response within 10 seconds, give up
+      setTimeout(() => {
+        if (get(isReconnecting)) {
+          isReconnecting.set(false);
+          sessionStorage.removeItem('activeGame');
+          goto('/home');
+        }
+      }, 10000);
+    }
+  });
+
   onDestroy(() => { if (rankTransitionTimeout) clearTimeout(rankTransitionTimeout); });
 </script>
+
+{#if $isReconnecting}
+  <div class="reconnect-overlay">
+    <div class="reconnect-spinner"></div>
+    <p class="reconnect-text">Verbinding herstellen…</p>
+  </div>
+{/if}
 
 <div class="game-layout" style="background:{theme.bg}; --accent:{theme.accent}; --accent-dim:{theme.accentDim}">
 

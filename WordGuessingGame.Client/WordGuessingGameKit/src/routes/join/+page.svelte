@@ -50,8 +50,8 @@
       <button class="btn-ghost btn-sm" on:click={() => isGuest.set(false)}>{$t('join.back')}</button>
 
     {:else}
-      <button on:click={() => goto('/login')}>{$t('join.login')}</button>
-      <button on:click={() => goto('/register')}>{$t('join.register')}</button>
+      <button on:click={() => goto('/inloggen')}>{$t('join.login')}</button>
+      <button on:click={() => goto('/registreren')}>{$t('join.register')}</button>
       <div class="divider">{$t('join.or')}</div>
       <button class="btn-ghost" on:click={() => isGuest.set(true)}>{$t('join.guest')}</button>
     {/if}

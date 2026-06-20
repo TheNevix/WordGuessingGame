@@ -1,6 +1,6 @@
 import { goto } from '$app/navigation';
 import {
-  username, profilePicUrl, bannerColor, userTags, activeTag, isGuest, isWaiting, gameStarted
+  username, profilePicUrl, bannerColor, userTags, activeTag, isGuest, isWaiting, gameStarted, rankedStats
 } from '$lib/stores.js';
 import { setLocale } from '$lib/i18n.js';
 
@@ -13,22 +13,30 @@ export async function tryRefreshToken() {
     if (res.ok) {
       const data = await res.json();
       _applyUserData(data);
-      goto('/dashboard');
+      // Only redirect from auth pages — never interrupt an active game page
+      const path = window.location.pathname;
+      if (path === '/inloggen' || path === '/registreren') {
+        goto('/home');
+      }
     }
   } catch { /* network error */ }
 }
 
 export async function handleLogin(loginUsername, loginPassword, rememberMe) {
-  const res = await fetch(`${API}/api/auth/login`, {
+  const res = await fetch(`${API}/api/auth/inloggen`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword, rememberMe })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? 'Login failed.');
+  const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : {};
+  if (!res.ok) {
+    const err = new Error(data.message ?? 'Ongeldige gebruikersnaam of wachtwoord.');
+    err.code = data.code; // e.g. 'email_not_verified' so the UI can show a notice, not an error
+    throw err;
+  }
   _applyUserData(data);
   const invite = new URLSearchParams(window.location.search).get('invite');
-  goto(invite ? `/join?invite=${invite}` : '/dashboard');
+  goto(invite ? `/join?invite=${invite}` : '/home');
 }
 
 export async function handleRegister(regUsername, regEmail, regPassword) {
@@ -37,22 +45,22 @@ export async function handleRegister(regUsername, regEmail, regPassword) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: regUsername.trim(), email: regEmail.trim(), password: regPassword })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? 'Registration failed.');
-  _applyUserData(data);
-  goto('/dashboard');
+  const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : {};
+  if (!res.ok) throw new Error(data.message ?? 'Registratie mislukt.');
+  // No login yet — user must verify email first. Page handles redirect.
 }
 
 export async function handleLogout() {
   try { await fetch(`${API}/api/auth/logout`, { method: 'POST' }); } catch { }
   username.set(''); isGuest.set(false); isWaiting.set(false); gameStarted.set(false);
-  profilePicUrl.set(''); bannerColor.set('#5b21b6'); userTags.set([]); activeTag.set(null);
+  profilePicUrl.set(''); bannerColor.set('#5b21b6'); userTags.set([]); activeTag.set(null); rankedStats.set(null);
   ['username', 'profilePicUrl', 'bannerColor', 'userTags', 'activeTag'].forEach(k => localStorage.removeItem(k));
-  goto('/login');
+  goto('/inloggen');
 }
 
 function _applyUserData(data) {
   isGuest.set(false);
+  rankedStats.set(null);
   if (data.username)          { username.set(data.username);       localStorage.setItem('username', data.username); }
   if (data.profilePictureUrl) { profilePicUrl.set(data.profilePictureUrl); localStorage.setItem('profilePicUrl', data.profilePictureUrl); }
   else                        { profilePicUrl.set(''); localStorage.removeItem('profilePicUrl'); }

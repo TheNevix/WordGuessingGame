@@ -13,7 +13,7 @@
       descKey: 'dashboard.ranked_desc',
       bg: 'linear-gradient(160deg, #1a0535 0%, #2d0f5e 50%, #0d0820 100%)',
       accent: '#f59e0b',
-      route: 'ranked',
+      route: 'competitief',
     },
     {
       id: 'quick',
@@ -31,7 +31,7 @@
       descKey: 'dashboard.private_desc',
       bg: 'linear-gradient(160deg, #0e0a30 0%, #1a1060 50%, #080520 100%)',
       accent: '#818cf8',
-      route: 'private',
+      route: 'prive',
     },
   ];
 

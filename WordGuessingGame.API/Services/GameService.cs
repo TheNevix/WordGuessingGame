@@ -20,10 +20,22 @@ namespace WordGuessingGame.API.Services
         private record PrivateLobbyEntry(User Creator, DateTime ExpiresAt);
         private readonly Dictionary<string, PrivateLobbyEntry> _privateLobbies = new();
         private readonly Dictionary<string, CancellationTokenSource> _botTimers = new();
+        private readonly Dictionary<string, CancellationTokenSource> _disconnectTimers = new();
         private readonly List<User> _rankedQueue = new();
 
-        private const int BotMatchDelaySecs = 15;
-        private static readonly string[] BotNames = { "Bot 🤖", "HAL 🤖", "R2D2 🤖" };
+        private static readonly (string Name, string Color)[] BotProfiles =
+        {
+            ("Woordenjager42",  "#1d4ed8"), ("Letterraad",     "#059669"), ("VanDenBerg99",  "#7c3aed"),
+            ("Spellbreker",     "#dc2626"), ("Raadselkoning",  "#0891b2"), ("Taalmeester21", "#ca8a04"),
+            ("Klinkerklap",     "#be185d"), ("Medeklinker55",  "#374151"), ("Woordenwolf",   "#6d28d9"),
+            ("Alfabetje77",     "#0369a1"), ("Puzzelaar",      "#16a34a"), ("Grijsbrein19",  "#4b5563"),
+            ("Flitsbrein",      "#ea580c"), ("NachtRaad27",    "#1e3a5f"), ("Woordspin",     "#7c3aed"),
+            ("Jagerboer5",      "#065f46"), ("DeBraber",       "#92400e"), ("Slotenmaker11", "#1d4ed8"),
+            ("Woorddief",       "#dc2626"), ("Taalterror",     "#6d28d9"), ("KoenVdMeer23",  "#0891b2"),
+            ("Sneldenker",      "#059669"), ("Letterdieb16",   "#be185d"), ("Raadselheld",   "#ca8a04"),
+            ("Quizmaster88",    "#374151"), ("Woord_Wizard",   "#7c3aed"), ("BramDeVos31",   "#0369a1"),
+            ("Cryptowoord",     "#065f46"), ("LarsLetters",    "#ea580c"), ("Zinnenbreker0", "#1d4ed8"),
+        };
 
         public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory)
         {
@@ -246,6 +258,200 @@ namespace WordGuessingGame.API.Services
             {
                 await StartGame(game);
             }
+        }
+
+        // A game is still "live" (reconnectable, and a drop should start the grace timer
+        // rather than end it) while it's in progress. A guessed word only ends the game for
+        // non-ranked modes; in ranked the series continues between rounds (IsGuessed is true
+        // during the ~4s gap before the next round) until SeriesComplete.
+        private static bool IsGameLive(GameState? game) =>
+            game != null && !game.SeriesComplete && (game.IsRanked || !game.IsGuessed);
+
+        // Called by OnDisconnectedAsync — gives 8 seconds to reconnect before ending the game
+        public void HandleConnectionDroppedAsync(string connectionId)
+        {
+            var game = _lobby.GetGameByPlayerId(connectionId);
+            Console.WriteLine($"[DISCONNECT] connId={connectionId} hasGame={game != null} isGuessed={game?.IsGuessed} seriesComplete={game?.SeriesComplete}");
+            if (!IsGameLive(game))
+            {
+                _ = DisconnectAsync(connectionId);
+                return;
+            }
+
+            var cts = new CancellationTokenSource();
+            _disconnectTimers[connectionId] = cts;
+
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(30), cts.Token); }
+                catch (TaskCanceledException) { return; }
+
+                _disconnectTimers.Remove(connectionId);
+                await DisconnectAsync(connectionId);
+            });
+        }
+
+        // Called from OnConnectedAsync — auto-restores session for authenticated players in an active game
+        public async Task<bool> TryAutoReconnectAsync(string newConnectionId, int appUserId)
+        {
+            Console.WriteLine($"[RECONNECT] TryAutoReconnect — appUserId={appUserId} namedPlayers={_namedPlayers.Count}");
+            foreach (var (c, p) in _namedPlayers)
+                Console.WriteLine($"[RECONNECT]   entry connId={c} username={p.Username} appUserId={p.AppUserId?.ToString() ?? "null"}");
+
+            User? player = null;
+            GameState? game = null;
+
+            foreach (var (connId, p) in _namedPlayers)
+            {
+                if (p.AppUserId != appUserId) continue;
+                var g = _lobby.GetGameByPlayerId(connId);
+                Console.WriteLine($"[RECONNECT] Match candidate connId={connId} hasGame={g != null} isGuessed={g?.IsGuessed} seriesComplete={g?.SeriesComplete}");
+                if (IsGameLive(g))
+                {
+                    player = p; game = g; break;
+                }
+            }
+
+            if (game == null || player == null)
+            {
+                Console.WriteLine($"[RECONNECT] No active game found for appUserId={appUserId}");
+                return false;
+            }
+
+            var oldConnectionId = player.ConnectionId;
+            Console.WriteLine($"[RECONNECT] Auto-reconnect appUserId={appUserId} old={oldConnectionId} new={newConnectionId}");
+
+            // Cancel the grace-period timer
+            if (_disconnectTimers.TryGetValue(oldConnectionId, out var cts))
+            {
+                cts.Cancel();
+                _disconnectTimers.Remove(oldConnectionId);
+            }
+
+            // Swap connection ID
+            _namedPlayers.Remove(oldConnectionId);
+            _pendingPlayers.Remove(newConnectionId);
+            player.ConnectionId = newConnectionId;
+            _namedPlayers[newConnectionId] = player;
+            _lobby.UpdatePlayerConnection(oldConnectionId, newConnectionId);
+
+            await _hub.Groups.AddToGroupAsync(newConnectionId, game.GameId.ToString());
+
+            var revealedLetters = game.CurrentWord
+                .Select(c => game.GuessedLetters.Contains(c) ? c.ToString().ToUpper() : "")
+                .ToList();
+
+            var wrongLetters = game.GuessedLetters
+                .Where(c => !game.CurrentWord.Contains(c))
+                .Select(c => c.ToString().ToUpper())
+                .ToList();
+
+            await _hub.Clients.Client(newConnectionId).SendAsync("GameReconnected", new
+            {
+                CurrentWordLength = game.CurrentWord.Length,
+                RevealedLetters   = revealedLetters,
+                WrongLetters      = wrongLetters,
+                Player1           = game.Player1?.Username,
+                Player2           = game.Player2?.Username,
+                Turn              = game.CurrentTurnUsername,
+                IsRanked          = game.IsRanked,
+                IsWon             = game.IsGuessed,
+                Player1SeriesWins = game.Player1SeriesWins,
+                Player2SeriesWins = game.Player2SeriesWins,
+                GameMode          = game.IsRanked ? "ranked" : game.IsPrivate ? "private" : "quick",
+                GuessSecondsLeft  = GetGuessSecondsLeft(game, player),
+                Player1Pfp            = game.Player1?.ProfilePictureUrl,
+                Player2Pfp            = game.Player2?.ProfilePictureUrl,
+                Player1BannerColor    = game.Player1?.BannerColor ?? "#5b21b6",
+                Player2BannerColor    = game.Player2?.BannerColor ?? "#5b21b6",
+                Player1ActiveTag      = game.Player1?.ActiveTag,
+                Player1ActiveTagColor = game.Player1?.ActiveTagColor,
+                Player2ActiveTag      = game.Player2?.ActiveTag,
+                Player2ActiveTagColor = game.Player2?.ActiveTagColor,
+            });
+
+            return true;
+        }
+
+        // Remaining seconds on the ranked turn timer, but only when it's the reconnecting
+        // player's own turn (otherwise the countdown isn't shown to them). 0 = no timer.
+        private static int GetGuessSecondsLeft(GameState game, User player)
+        {
+            if (!game.IsRanked || !game.GuessTurnEndsAt.HasValue) return 0;
+            if (game.CurrentTurnUsername != player.Username) return 0;
+            var secs = (int)Math.Ceiling((game.GuessTurnEndsAt.Value - DateTime.UtcNow).TotalSeconds);
+            return Math.Clamp(secs, 0, 30);
+        }
+
+        // Kept as fallback for guest users (no appUserId)
+        public async Task ReconnectAsync(string newConnectionId, string username)
+        {
+            User? player = null;
+            GameState? game = null;
+
+            foreach (var (connId, p) in _namedPlayers)
+            {
+                if (p.AppUserId.HasValue) continue; // authenticated users handled in OnConnectedAsync
+                if (p.Username != username) continue;
+                var g = _lobby.GetGameByPlayerId(connId);
+                if (IsGameLive(g))
+                {
+                    player = p; game = g; break;
+                }
+            }
+
+            if (game == null || player == null)
+            {
+                await _hub.Clients.Client(newConnectionId).SendAsync("ReconnectFailed");
+                return;
+            }
+
+            var oldConnectionId = player.ConnectionId;
+            if (_disconnectTimers.TryGetValue(oldConnectionId, out var cts))
+            {
+                cts.Cancel();
+                _disconnectTimers.Remove(oldConnectionId);
+            }
+
+            _namedPlayers.Remove(oldConnectionId);
+            _pendingPlayers.Remove(newConnectionId);
+            player.ConnectionId = newConnectionId;
+            _namedPlayers[newConnectionId] = player;
+            _lobby.UpdatePlayerConnection(oldConnectionId, newConnectionId);
+
+            await _hub.Groups.AddToGroupAsync(newConnectionId, game.GameId.ToString());
+
+            var revealedLetters = game.CurrentWord
+                .Select(c => game.GuessedLetters.Contains(c) ? c.ToString().ToUpper() : "")
+                .ToList();
+            var wrongLetters = game.GuessedLetters
+                .Where(c => !game.CurrentWord.Contains(c))
+                .Select(c => c.ToString().ToUpper())
+                .ToList();
+
+            await _hub.Clients.Client(newConnectionId).SendAsync("GameReconnected", new
+            {
+                CurrentWordLength = game.CurrentWord.Length,
+                RevealedLetters   = revealedLetters,
+                WrongLetters      = wrongLetters,
+                Player1           = game.Player1?.Username,
+                Player2           = game.Player2?.Username,
+                Turn              = game.CurrentTurnUsername,
+                IsRanked          = game.IsRanked,
+                IsWon             = game.IsGuessed,
+                Player1SeriesWins = game.Player1SeriesWins,
+                Player2SeriesWins = game.Player2SeriesWins,
+                GameMode          = game.IsRanked ? "ranked" : game.IsPrivate ? "private" : "quick",
+                GuessSecondsLeft  = GetGuessSecondsLeft(game, player),
+                Player1Pfp            = game.Player1?.ProfilePictureUrl,
+                Player2Pfp            = game.Player2?.ProfilePictureUrl,
+                Player1BannerColor    = game.Player1?.BannerColor ?? "#5b21b6",
+                Player2BannerColor    = game.Player2?.BannerColor ?? "#5b21b6",
+                Player1ActiveTag      = game.Player1?.ActiveTag,
+                Player1ActiveTagColor = game.Player1?.ActiveTagColor,
+                Player2ActiveTag      = game.Player2?.ActiveTag,
+                Player2ActiveTagColor = game.Player2?.ActiveTagColor,
+            });
         }
 
         // 2 options: player disconnects during game, player disconnects while waiting
@@ -623,7 +829,7 @@ namespace WordGuessingGame.API.Services
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(BotMatchDelaySecs), ct);
+                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(1, 16)), ct);
             }
             catch (TaskCanceledException) { return; }
 
@@ -631,11 +837,15 @@ namespace WordGuessingGame.API.Services
 
             try
             {
-                var botName = BotNames[new Random().Next(BotNames.Length)];
-                var bot = new User($"BOT_{Guid.NewGuid()}", botName) { IsBot = true };
+                var profile = BotProfiles[Random.Shared.Next(BotProfiles.Length)];
+                var bot = new User($"BOT_{Guid.NewGuid()}", profile.Name)
+                {
+                    IsBot = true,
+                    BannerColor = profile.Color,
+                };
 
                 var game = _lobby.StartBotGame(human, bot);
-                if (game == null) return; // human was already matched naturally
+                if (game == null) return;
 
                 await _hub.Groups.AddToGroupAsync(human.ConnectionId, game.GameId.ToString());
                 await StartGame(game);
@@ -691,7 +901,7 @@ namespace WordGuessingGame.API.Services
 
         private async Task ScheduleRankedBotMatchAsync(User human, CancellationToken ct)
         {
-            try { await Task.Delay(TimeSpan.FromSeconds(BotMatchDelaySecs), ct); }
+            try { await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(1, 16)), ct); }
             catch (TaskCanceledException) { return; }
 
             _botTimers.Remove(human.ConnectionId);
@@ -706,8 +916,16 @@ namespace WordGuessingGame.API.Services
                     RankedTier.Goud => "medium",
                     _ => "hard"
                 };
-                var botName = BotNames[new Random().Next(BotNames.Length)];
-                var bot = new User($"BOT_{Guid.NewGuid()}", botName) { IsBot = true, BotDifficulty = difficulty };
+                var profile = BotProfiles[Random.Shared.Next(BotProfiles.Length)];
+                // Give bot an RP close to the human's so the matchmaking looks realistic
+                int botRP = Math.Max(0, human.RankedRP + Random.Shared.Next(-150, 151));
+                var bot = new User($"BOT_{Guid.NewGuid()}", profile.Name)
+                {
+                    IsBot = true,
+                    BotDifficulty = difficulty,
+                    BannerColor = profile.Color,
+                    RankedRP = botRP,
+                };
 
                 var game = _lobby.StartRankedGame(human, bot);
                 if (game == null) return;
@@ -869,6 +1087,7 @@ namespace WordGuessingGame.API.Services
 
         private async Task StartGuessTurnTimerAsync(GameState game, User player, CancellationToken ct)
         {
+            game.GuessTurnEndsAt = DateTime.UtcNow.AddSeconds(30);
             try { await Task.Delay(30000, ct); }
             catch (TaskCanceledException) { return; }
 

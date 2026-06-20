@@ -113,6 +113,15 @@
             _playerToGame.Remove(connectionId);
         }
 
+        public void UpdatePlayerConnection(string oldConnectionId, string newConnectionId)
+        {
+            if (_playerToGame.TryGetValue(oldConnectionId, out var gameId))
+            {
+                _playerToGame.Remove(oldConnectionId);
+                _playerToGame[newConnectionId] = gameId;
+            }
+        }
+
         public void EndGame(Guid gameId)
         {
             _games.Remove(gameId);

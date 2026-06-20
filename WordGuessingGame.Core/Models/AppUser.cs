@@ -11,6 +11,11 @@ public class AppUser
     public Language Language { get; set; } = Language.Dutch;
     public string BannerColor { get; set; } = "#5b21b6";
     public string? ActiveTag { get; set; }
+    public bool EmailVerified { get; set; } = false;
+    public string? VerificationToken { get; set; }
+    public DateTime? VerificationTokenExpiry { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiry { get; set; }
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<UserTag> Tags { get; set; } = new List<UserTag>();
 }

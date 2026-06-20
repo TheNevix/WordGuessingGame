@@ -13,7 +13,7 @@
     // Redirect only if we're not actually in queue and no lobby link arrives.
     // Use a longer window so slow connections aren't kicked prematurely.
     const timeout = setTimeout(() => {
-      if (!$isWaiting && !$privateLobbyLink) goto('/dashboard');
+      if (!$isWaiting && !$privateLobbyLink) goto('/home');
     }, 8000);
     return () => clearTimeout(timeout);
   });

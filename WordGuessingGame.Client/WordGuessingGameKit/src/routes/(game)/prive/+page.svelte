@@ -6,7 +6,7 @@
 
   async function generate() {
     await connectToHub('create-private', null, $username);
-    goto('/waiting');
+    goto('/wachten');
   }
 </script>
 
@@ -17,6 +17,6 @@
     <button on:click={generate}>
       {$t('private_lobby.generate')}
     </button>
-    <button class="btn-ghost btn-sm" on:click={() => goto('/dashboard')}>{$t('private_lobby.back')}</button>
+    <button class="btn-ghost btn-sm" on:click={() => goto('/home')}>{$t('private_lobby.back')}</button>
   </div>
 </div>

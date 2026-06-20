@@ -69,6 +69,7 @@ export const gameMode          = writable('quick');
 
 // ── Game ──────────────────────────────────────────────────────
 export const gameStarted     = writable(false);
+export const isReconnecting  = writable(false);
 export const gameInformation = writable(null);
 export const logMessages     = writable([]);
 export const letters         = writable([]);

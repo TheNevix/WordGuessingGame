@@ -29,6 +29,12 @@ public class UserRepository : IUserRepository
     public async Task<bool> EmailExistsAsync(string email) =>
         await _context.Users.AnyAsync(u => u.Email == email);
 
+    public async Task<AppUser?> GetByVerificationTokenAsync(string token) =>
+        await _context.Users.FirstOrDefaultAsync(u => u.VerificationToken == token);
+
+    public async Task<AppUser?> GetByPasswordResetTokenAsync(string token) =>
+        await _context.Users.Include(u => u.Tags).FirstOrDefaultAsync(u => u.PasswordResetToken == token);
+
     public async Task AddAsync(AppUser user) =>
         await _context.Users.AddAsync(user);
 

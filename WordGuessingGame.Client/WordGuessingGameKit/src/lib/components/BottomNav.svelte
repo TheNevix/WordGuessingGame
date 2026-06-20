@@ -4,10 +4,10 @@
   import { t } from '$lib/i18n.js';
 
   const tabs = [
-    { path: '/dashboard',   icon: '⚡', key: 'nav.play' },
-    { path: '/challenges',  icon: '✦', key: 'nav.challenges_tab' },
-    { path: '/leaderboard', icon: '▲', key: 'nav.leaderboard_tab' },
-    { path: '/profile',     icon: '◉', key: 'nav.profile_tab' },
+    { path: '/home',         icon: '⚡', key: 'nav.play' },
+    { path: '/uitdagingen',  icon: '✦', key: 'nav.challenges_tab' },
+    { path: '/ranglijst',    icon: '▲', key: 'nav.leaderboard_tab' },
+    { path: '/profiel',      icon: '◉', key: 'nav.profile_tab' },
   ];
 </script>
 

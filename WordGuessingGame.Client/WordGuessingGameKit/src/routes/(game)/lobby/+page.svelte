@@ -61,8 +61,8 @@
   }
 
   function goBack() {
-    if ($isGuest) { isGuest.set(false); goto('/login'); }
-    else          { goto('/dashboard'); }
+    if ($isGuest) { isGuest.set(false); goto('/inloggen'); }
+    else          { goto('/home'); }
   }
 
   onDestroy(() => {

@@ -9,6 +9,8 @@ public interface IUserRepository
     Task<AppUser?> GetByEmailAsync(string email);
     Task<bool> UsernameExistsAsync(string username);
     Task<bool> EmailExistsAsync(string email);
+    Task<AppUser?> GetByVerificationTokenAsync(string token);
+    Task<AppUser?> GetByPasswordResetTokenAsync(string token);
     Task AddAsync(AppUser user);
     Task SaveChangesAsync();
 }

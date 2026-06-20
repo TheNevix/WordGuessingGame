@@ -6,7 +6,7 @@
   onMount(async () => {
     const res = await fetch('/api/auth/token');
     const { token } = await res.json();
-    if (!token) goto('/login');
+    if (!token) goto('/inloggen');
   });
 </script>
 

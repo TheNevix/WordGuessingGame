@@ -9,12 +9,12 @@
   import '../ranked-lobby.css';
   import '../countdown.css';
 
-  const version = "v1.5.1";
+  const version = "v1.6.0";
 
   onMount(async () => {
     hydrateFromStorage();
-    await tryRefreshToken();
     initHub();
+    await tryRefreshToken();
   });
 
   $: if ($opponentLeft) setTimeout(() => opponentLeft.set(false), 4000);

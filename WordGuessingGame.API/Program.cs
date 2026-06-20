@@ -25,6 +25,8 @@ namespace WordGuessingGame.API
             builder.Services.AddRepository(builder.Configuration);
 
             // ── Auth services ──────────────────────────────────────────
+            builder.Services.AddHttpClient();
+            builder.Services.AddScoped<IEmailService, EmailService>();
             builder.Services.AddScoped<IAuthService, AuthService>();
 
             // ── JWT authentication ─────────────────────────────────────

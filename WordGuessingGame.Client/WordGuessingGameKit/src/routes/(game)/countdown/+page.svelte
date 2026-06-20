@@ -1,7 +1,28 @@
 <script>
-  import { username, matchData, matchCountdown, isRematch, activeTag, userTags, gameMode } from '$lib/stores.js';
+  import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { goto } from '$app/navigation';
+  import { username, matchData, matchCountdown, isRematch, activeTag, userTags, gameMode, isReconnecting } from '$lib/stores.js';
+  import { reconnectToHub } from '$lib/hub.js';
   import { t } from '$lib/i18n.js';
   import Banner from '$lib/components/Banner.svelte';
+
+  onMount(async () => {
+    // A hard refresh on the countdown wipes the in-memory match state (matchData becomes
+    // null). Re-attach to the running game so the server adds us back to its group; the
+    // resulting GameReconnected / GameStarted then moves us into /spel. Without this we'd
+    // sit on a frozen countdown forever.
+    if (!get(matchData)) {
+      isReconnecting.set(true);
+      await reconnectToHub(get(username));
+      setTimeout(() => {
+        if (get(isReconnecting)) {
+          isReconnecting.set(false);
+          goto('/home');
+        }
+      }, 10000);
+    }
+  });
 
   const themes = {
     ranked:  { bg: 'linear-gradient(160deg,#1a0535 0%,#2d0f5e 50%,#0d0820 100%)', accent: '#f59e0b', label: '⚔️ RANKED',       vs: '#f59e0b' },

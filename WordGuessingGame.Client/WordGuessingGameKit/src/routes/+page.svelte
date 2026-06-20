@@ -7,6 +7,6 @@
     if (invite) { goto(`/join?invite=${invite}`); return; }
     const res = await fetch('/api/auth/token');
     const { token } = await res.json();
-    goto(token ? '/dashboard' : '/login');
+    goto(token ? '/home' : '/inloggen');
   });
 </script>

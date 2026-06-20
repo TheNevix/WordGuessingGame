@@ -13,12 +13,18 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
+    private readonly IEmailService _emailService;
     private readonly IConfiguration _config;
 
-    public AuthService(IUserRepository userRepository, IRefreshTokenRepository refreshTokenRepository, IConfiguration config)
+    public AuthService(
+        IUserRepository userRepository,
+        IRefreshTokenRepository refreshTokenRepository,
+        IEmailService emailService,
+        IConfiguration config)
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _emailService = emailService;
         _config = config;
     }
 
@@ -28,16 +34,53 @@ public class AuthService : IAuthService
     private static List<TagDto> MapTags(AppUser user) =>
         user.Tags.Select(t => new TagDto { Name = t.Name, Color = t.Color }).ToList();
 
-    public async Task<AuthResponse?> LoginAsync(LoginRequest request)
+    private static string GenerateSecureToken()
+    {
+        var bytes = new byte[48];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes)
+            .Replace('+', '-').Replace('/', '_').Replace("=", "");
+    }
+
+    public async Task<LoginResult> LoginAsync(LoginRequest request)
     {
         var user = await _userRepository.GetByUsernameAsync(request.Username);
-        if (user is null)
-            return null;
+        if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            return LoginResult.Invalid();
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return null;
+        if (!user.EmailVerified)
+        {
+            // Existing accounts (created before email verification existed) have no token and
+            // never received a mail. Generate one and send it on login so they have a way to
+            // verify. Only (re)send when there is no still-valid token, to avoid spamming.
+            var hasValidToken = !string.IsNullOrEmpty(user.VerificationToken)
+                                && user.VerificationTokenExpiry.HasValue
+                                && user.VerificationTokenExpiry.Value > DateTime.UtcNow;
 
-        var response = new AuthResponse
+            if (!hasValidToken)
+            {
+                user.VerificationToken = GenerateSecureToken();
+                user.VerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+                await _userRepository.SaveChangesAsync();
+
+                try
+                {
+                    await _emailService.SendConfirmationEmailAsync(user.Email, user.Username, user.VerificationToken);
+                }
+                catch
+                {
+                    // Sending failed (e.g. network error). Clear the token so the next login
+                    // attempt retries instead of assuming a mail is sitting in their inbox.
+                    user.VerificationToken = null;
+                    user.VerificationTokenExpiry = null;
+                    await _userRepository.SaveChangesAsync();
+                }
+            }
+
+            return LoginResult.NotVerified();
+        }
+
+        var auth = new AuthResponse
         {
             Token = GenerateAccessToken(user, request.RememberMe),
             Username = user.Username,
@@ -49,40 +92,84 @@ public class AuthService : IAuthService
         };
 
         if (request.RememberMe)
-            response.RefreshToken = await CreateRefreshTokenAsync(user.Id);
+            auth.RefreshToken = await CreateRefreshTokenAsync(user.Id);
 
-        return response;
+        return LoginResult.Ok(auth);
     }
 
-    public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
+    public async Task<string?> RegisterAsync(RegisterRequest request)
     {
         if (await _userRepository.UsernameExistsAsync(request.Username))
-            return null;
+            return "Gebruikersnaam is al in gebruik.";
 
         if (await _userRepository.EmailExistsAsync(request.Email))
-            return null;
+            return "E-mailadres is al in gebruik.";
+
+        var token = GenerateSecureToken();
 
         var user = new AppUser
         {
             Username = request.Username,
             Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            EmailVerified = false,
+            VerificationToken = token,
+            VerificationTokenExpiry = DateTime.UtcNow.AddHours(24),
             Tags = new List<UserTag> { new UserTag { Name = "OG" } }
         };
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
 
-        return new AuthResponse
-        {
-            Token = GenerateAccessToken(user, rememberMe: false),
-            Username = user.Username,
-            ProfilePictureUrl = user.ProfilePictureUrl,
-            Language = MapLanguage(user.Language),
-            BannerColor = user.BannerColor,
-            ActiveTag = user.ActiveTag,
-            Tags = MapTags(user)
-        };
+        await _emailService.SendConfirmationEmailAsync(request.Email, request.Username, token);
+
+        return null;
+    }
+
+    public async Task<bool> VerifyEmailAsync(string token)
+    {
+        var user = await _userRepository.GetByVerificationTokenAsync(token);
+        if (user is null || user.VerificationTokenExpiry < DateTime.UtcNow)
+            return false;
+
+        user.EmailVerified = true;
+        user.VerificationToken = null;
+        user.VerificationTokenExpiry = null;
+        await _userRepository.SaveChangesAsync();
+
+        await _emailService.SendWelcomeEmailAsync(user.Email, user.Username);
+
+        return true;
+    }
+
+    public async Task<bool> ForgotPasswordAsync(string email)
+    {
+        var user = await _userRepository.GetByEmailAsync(email);
+        if (user is null || !user.EmailVerified)
+            return true; // Don't reveal whether email exists
+
+        var token = GenerateSecureToken();
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+        await _userRepository.SaveChangesAsync();
+
+        await _emailService.SendPasswordResetEmailAsync(user.Email, user.Username, token);
+
+        return true;
+    }
+
+    public async Task<bool> ResetPasswordAsync(string token, string newPassword)
+    {
+        var user = await _userRepository.GetByPasswordResetTokenAsync(token);
+        if (user is null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return false;
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        await _userRepository.SaveChangesAsync();
+
+        return true;
     }
 
     public async Task<AuthResponse?> RefreshAsync(string refreshToken)
@@ -91,7 +178,6 @@ public class AuthService : IAuthService
         if (token is null || !token.IsActive)
             return null;
 
-        // Rotate: revoke old, issue new
         token.RevokedAt = DateTime.UtcNow;
         var newRefreshToken = await CreateRefreshTokenAsync(token.UserId);
         await _refreshTokenRepository.SaveChangesAsync();
@@ -133,7 +219,6 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Email, user.Email)
         };
 
-        // Short-lived when rememberMe (refresh token handles renewal), longer otherwise
         var expiry = rememberMe
             ? DateTime.UtcNow.AddHours(1)
             : DateTime.UtcNow.AddDays(7);

@@ -67,7 +67,7 @@
 
   <!-- Topbar -->
   <div class="rk-topbar">
-    <button class="rk-back-btn" on:click={() => goto('/dashboard')}>‹</button>
+    <button class="rk-back-btn" on:click={() => goto('/home')}>‹</button>
     <div class="rk-eyebrow">
       <span class="rk-dot"></span>
       {$t('dashboard.ranked_title')}
