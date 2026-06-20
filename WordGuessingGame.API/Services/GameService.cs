@@ -190,6 +190,10 @@ namespace WordGuessingGame.API.Services
                 Player2SeriesWins = game.Player2SeriesWins,
             });
 
+            _logger.LogInformation("[GAME] Started {GameId} — {Player1} vs {Player2} (mode={Mode}, wordLength={Length})",
+                game.GameId, game.Player1?.Username, game.Player2?.Username,
+                game.IsRanked ? "ranked" : game.IsPrivate ? "private" : "quick", game.CurrentWord.Length);
+
             // If the bot goes first, kick off its turn
             if (game.Player1?.IsBot == true)
                 _ = ScheduleBotTurnAsync(game);
@@ -523,6 +527,9 @@ namespace WordGuessingGame.API.Services
 
             game.TotalGuesses++;
 
+            var guesser = game.Player1?.ConnectionId == connectionId ? game.Player1 : game.Player2;
+            _logger.LogInformation("[GUESS] {Username} guessed '{Guess}' in game {GameId}", guesser?.Username, guess, game.GameId);
+
             if (guess.Length == 1)
             {
                 await HandleCharGuess(game, connectionId, guess[0]);
@@ -599,6 +606,9 @@ namespace WordGuessingGame.API.Services
 
             var winner = game.Player1?.ConnectionId == connectionId ? game.Player1 : game.Player2;
             var loser  = game.Player1?.ConnectionId == connectionId ? game.Player2 : game.Player1;
+
+            _logger.LogInformation("[WIN] {Winner} guessed the word '{Word}' in game {GameId} (ranked={Ranked})",
+                winner?.Username, game.CurrentWord, game.GameId, game.IsRanked);
 
             if (game.IsRanked)
             {

@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Formatting.Display;
@@ -55,7 +56,8 @@ namespace WordGuessingGame.API
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-            builder.Services.AddSignalR();
+            builder.Services.AddSingleton<LoggingHubFilter>();
+            builder.Services.AddSignalR(options => options.AddFilter<LoggingHubFilter>());
 
             // ── Database + repositories ────────────────────────────────
             builder.Services.AddRepository(builder.Configuration);
