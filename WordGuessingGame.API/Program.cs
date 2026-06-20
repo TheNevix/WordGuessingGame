@@ -1,6 +1,9 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Formatting.Display;
+using Serilog.Sinks.Grafana.Loki;
 using WordGuessingGame.API.Hubs;
 using WordGuessingGame.API.Models;
 using WordGuessingGame.API.Services;
@@ -14,6 +17,39 @@ namespace WordGuessingGame.API
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
+            // ── Logging: Serilog → Console + Grafana Loki ──────────────
+            // Logs are labelled with the runtime environment (Development locally, Production
+            // on the server), so dev and prod are filterable in Grafana via {env="..."}.
+            // Loki is only attached when its config is present; otherwise we just log to console.
+            builder.Host.UseSerilog((context, loggerConfig) =>
+            {
+                // Levels come from the "Serilog" config section so verbosity can be tuned
+                // (e.g. quiet EF queries down) without recompiling. Defaults to Information+
+                // for everything, which mirrors the full console output incl. SQL and errors.
+                loggerConfig
+                    .ReadFrom.Configuration(context.Configuration)
+                    .Enrich.FromLogContext()
+                    .WriteTo.Console();
+
+                var lokiUrl = context.Configuration["Loki:Url"];
+                var lokiUser = context.Configuration["Loki:User"];
+                var lokiToken = context.Configuration["Loki:Token"];
+                if (!string.IsNullOrWhiteSpace(lokiUrl) && !string.IsNullOrWhiteSpace(lokiToken))
+                {
+                    loggerConfig.WriteTo.GrafanaLoki(
+                        lokiUrl,
+                        labels: new[]
+                        {
+                            new LokiLabel { Key = "app", Value = "raad-api" },
+                            new LokiLabel { Key = "env", Value = context.HostingEnvironment.EnvironmentName },
+                        },
+                        credentials: new LokiCredentials { Login = lokiUser, Password = lokiToken },
+                        // Send the rendered message (not the default JSON event) so log lines
+                        // read like the console instead of a raw JSON blob.
+                        textFormatter: new MessageTemplateTextFormatter("{Message:lj}{NewLine}{Exception}"));
+                }
+            });
 
             // ── Core services ──────────────────────────────────────────
             builder.Services.AddControllers();
@@ -87,6 +123,9 @@ namespace WordGuessingGame.API
             });
 
             var app = builder.Build();
+
+            // Concise one-line-per-request HTTP logging
+            app.UseSerilogRequestLogging();
 
             // ── Middleware pipeline ────────────────────────────────────
             if (app.Environment.IsDevelopment())

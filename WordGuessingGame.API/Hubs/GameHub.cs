@@ -8,10 +8,12 @@ namespace WordGuessingGame.API.Hubs
     public class GameHub : Hub
     {
         private readonly GameService _gameService;
+        private readonly ILogger<GameHub> _logger;
 
-        public GameHub(GameService gameService)
+        public GameHub(GameService gameService, ILogger<GameHub> logger)
         {
             _gameService = gameService;
+            _logger = logger;
         }
 
         // Returns the authenticated user's DB id, or null for guests
@@ -24,7 +26,7 @@ namespace WordGuessingGame.API.Hubs
         public override async Task OnConnectedAsync()
         {
             var appUserId = GetAuthUserId();
-            Console.WriteLine($"[CONNECTED] connId={Context.ConnectionId} appUserId={appUserId?.ToString() ?? "null"}");
+            _logger.LogInformation("[CONNECTED] connId={ConnId} appUserId={AppUserId}", Context.ConnectionId, appUserId);
             if (appUserId.HasValue && await _gameService.TryAutoReconnectAsync(Context.ConnectionId, appUserId.Value))
             {
                 await base.OnConnectedAsync();

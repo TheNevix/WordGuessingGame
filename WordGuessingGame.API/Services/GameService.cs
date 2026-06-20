@@ -15,6 +15,7 @@ namespace WordGuessingGame.API.Services
         private readonly WordList _wordList;
         private readonly IHubContext<GameHub> _hub;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<GameService> _logger;
         private readonly Dictionary<string, User> _pendingPlayers = new();
         private readonly Dictionary<string, User> _namedPlayers = new();
         private record PrivateLobbyEntry(User Creator, DateTime ExpiresAt);
@@ -37,12 +38,13 @@ namespace WordGuessingGame.API.Services
             ("Cryptowoord",     "#065f46"), ("LarsLetters",    "#ea580c"), ("Zinnenbreker0", "#1d4ed8"),
         };
 
-        public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory)
+        public GameService(Lobby lobby, WordList wordList, IHubContext<GameHub> hub, IServiceScopeFactory scopeFactory, ILogger<GameService> logger)
         {
             _lobby = lobby;
             _wordList = wordList;
             _hub = hub;
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         public async Task AddPendingConnection(string connectionId)
@@ -271,7 +273,7 @@ namespace WordGuessingGame.API.Services
         public void HandleConnectionDroppedAsync(string connectionId)
         {
             var game = _lobby.GetGameByPlayerId(connectionId);
-            Console.WriteLine($"[DISCONNECT] connId={connectionId} hasGame={game != null} isGuessed={game?.IsGuessed} seriesComplete={game?.SeriesComplete}");
+            _logger.LogInformation("[DISCONNECT] connId={ConnId} hasGame={HasGame} isGuessed={IsGuessed} seriesComplete={SeriesComplete}", connectionId, game != null, game?.IsGuessed, game?.SeriesComplete);
             if (!IsGameLive(game))
             {
                 _ = DisconnectAsync(connectionId);
@@ -294,9 +296,9 @@ namespace WordGuessingGame.API.Services
         // Called from OnConnectedAsync — auto-restores session for authenticated players in an active game
         public async Task<bool> TryAutoReconnectAsync(string newConnectionId, int appUserId)
         {
-            Console.WriteLine($"[RECONNECT] TryAutoReconnect — appUserId={appUserId} namedPlayers={_namedPlayers.Count}");
+            _logger.LogInformation("[RECONNECT] TryAutoReconnect — appUserId={AppUserId} namedPlayers={NamedPlayers}", appUserId, _namedPlayers.Count);
             foreach (var (c, p) in _namedPlayers)
-                Console.WriteLine($"[RECONNECT]   entry connId={c} username={p.Username} appUserId={p.AppUserId?.ToString() ?? "null"}");
+                _logger.LogInformation("[RECONNECT] entry connId={ConnId} username={Username} appUserId={AppUserId}", c, p.Username, p.AppUserId);
 
             User? player = null;
             GameState? game = null;
@@ -305,7 +307,7 @@ namespace WordGuessingGame.API.Services
             {
                 if (p.AppUserId != appUserId) continue;
                 var g = _lobby.GetGameByPlayerId(connId);
-                Console.WriteLine($"[RECONNECT] Match candidate connId={connId} hasGame={g != null} isGuessed={g?.IsGuessed} seriesComplete={g?.SeriesComplete}");
+                _logger.LogInformation("[RECONNECT] Match candidate connId={ConnId} hasGame={HasGame} isGuessed={IsGuessed} seriesComplete={SeriesComplete}", connId, g != null, g?.IsGuessed, g?.SeriesComplete);
                 if (IsGameLive(g))
                 {
                     player = p; game = g; break;
@@ -314,12 +316,12 @@ namespace WordGuessingGame.API.Services
 
             if (game == null || player == null)
             {
-                Console.WriteLine($"[RECONNECT] No active game found for appUserId={appUserId}");
+                _logger.LogInformation("[RECONNECT] No active game found for appUserId={AppUserId}", appUserId);
                 return false;
             }
 
             var oldConnectionId = player.ConnectionId;
-            Console.WriteLine($"[RECONNECT] Auto-reconnect appUserId={appUserId} old={oldConnectionId} new={newConnectionId}");
+            _logger.LogInformation("[RECONNECT] Auto-reconnect appUserId={AppUserId} old={OldConnId} new={NewConnId}", appUserId, oldConnectionId, newConnectionId);
 
             // Cancel the grace-period timer
             if (_disconnectTimers.TryGetValue(oldConnectionId, out var cts))
@@ -852,7 +854,7 @@ namespace WordGuessingGame.API.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BOT] Error starting bot match: {ex.Message}");
+                _logger.LogError(ex, "[BOT] Error starting bot match");
             }
         }
 
@@ -935,7 +937,7 @@ namespace WordGuessingGame.API.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[RANKED BOT] Error: {ex.Message}");
+                _logger.LogError(ex, "[RANKED BOT] Error starting ranked bot match");
             }
         }
 
@@ -1190,7 +1192,7 @@ namespace WordGuessingGame.API.Services
             game.GuessCts = null;
             game.Rematch = new List<bool> { false, false };
             game.CurrentWord = _wordList.Words[new Random().Next(_wordList.Words.Count)];
-            Console.WriteLine($"[DEBUG] Word selected: {game.CurrentWord}");
+            _logger.LogDebug("[DEBUG] Word selected: {Word}", game.CurrentWord);
             game.GuessedLetters.Clear();
             game.IsGuessed = false;
             game.TotalGuesses = 0;
